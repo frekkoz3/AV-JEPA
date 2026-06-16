@@ -14,6 +14,15 @@ Our ultimate goal is to investigate whether a JEPA-based architecture can simult
 
 ## Repository Structure
 
+## Structure
+
+```bash
+├── configs/                  # Folder containing configs files
+├── docs/                     # Folder containing paper references
+├── src/                      # Folder containing the code base
+└── README.md
+```
+
 ## Formulation
 
 ## Quick Setup
