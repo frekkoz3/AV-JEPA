@@ -10,14 +10,20 @@ Finally, we will present our proposal for a new, stable and end-to-end trainable
 * [The JEPA framework](#the-jepa-framework)
   * [Contents](#contents)
   * [Self-Supervised Learning](#self-supervised-learning)
-
-    * [Contrastive Learning](#contrastive-methods)
+    * [Contrastive Methods](#contrastive-methods)
     * [Generative Algorithms](#generative-algorithms)
-
-  * [JEPA architecture](#the-jepa-framework)
+  * [JEPA: the core ideas](#jepa-the-core-ideas)
+  * [LeWorld Model](#leworld-model)
+    * [Architecture](#architecture)
+    * [Loss](#loss)
+    * [SIGReg explanation](#sigreg-explanation)
+    * [Empirical Results & Performance Benchmarks](#empirical-results--performance-benchmarks)
+      * [Control & Task Success Rates](#control--task-success-rates)
+      * [Computational Speedups](#computational-speedups)
+      * [Latent Representation Probing (Geometry Accuracy)](#latent-representation-probing-geometry-accuracy)
+      * [Training Stability](#training-stability)
   * [AV-JEPA](#av-jepa)
-  * [LeWorldModel](#leworld-model)
-  * [References](#main-references)
+  * [Main References](#main-references)
 <!-- TOC -->
 
 ---
@@ -258,8 +264,16 @@ When JEPA is used to take actions in the real world, the training of the archite
 This separation may be critical, since it disentangles two faces of the same medal. If you think of a baby, he does not learn how the world works and *after* how to act in it, but rather he learns how to move *while* understanding the world dynamics. \
 This is exactly what we are trying to do in AV-JEPA: implement a JEPA that is trainable end-to-end, all together.
 
-Obviously, we are not the first in literature \
-[#TODO]
+Literature is delving increasing interest on this specific detail of JEPA. \
+Remarkable results are:
+- **TD-JEPA**
+- **ACT-JEPA**
+
+
+Practically speaking, we have three model to train: the encoder, $\mathcal{E}$, the predictor, $\mathcal{P}$, and the policy model $\Pi$. \
+For the first two, we decided to keep the same architectures of LeWorldModel, since they are a standard and have shown incredible performances. \
+For the policy ... $\BHO\?$
+
 
 ---
 
