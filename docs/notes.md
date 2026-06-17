@@ -253,6 +253,13 @@ To determine if the latent states captured actual physical characteristics, froz
 ---
 
 ## AV-JEPA
+Our model aims to overcome a limit of current JEPA models. \
+When JEPA is used to take actions in the real world, the training of the architecture consists of two steps: the encoder and the predictor modules are trained at first, without considering the action space nor the policy, which is optimized only in a second moment while the state modules are frozen. \
+This separation may be critical, since it disentangles two faces of the same medal. If you think of a baby, he does not learn how the world works and *after* how to act in it, but rather he learns how to move *while* understanding the world dynamics. \
+This is exactly what we are trying to do in AV-JEPA: implement a JEPA that is trainable end-to-end, all together.
+
+Obviously, we are not the first in literature \
+[#TODO]
 
 ---
 
@@ -263,7 +270,7 @@ Main papers:
 * *Gui, Chen et al.*, 2024, ***A Survey on Self-Supervised Learning: Algorithms, Applications, and Future Trends***
 * *Hu, Wang et al.*, 2020, ***A Comprehensive Survey on Contrastive Learning***
 * *Balestriero*, 2023, ***A cookbook of Self-Supervised Learning***
-* *Lucas Maes, Quentin Le Lidec, Damien Scieur, Yann LeCun, Randall Balestriero*, 2026, **LeWorldModel: Stable End-to-End Joint-Embedding Predictive Architecture from Pixels**
+* *Maes, Le Lidec et al.*, 2026, ***LeWorldModel: Stable End-to-End Joint-Embedding Predictive Architecture from Pixels***
 
 Main videos:
 
