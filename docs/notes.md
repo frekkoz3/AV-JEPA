@@ -1,7 +1,7 @@
 # The JEPA framework
 
 The scope of this document is to provide an introduction to the framework of the *Joint-Embedding Predictive Architecture* (JEPA), covering at first the seminal ideas, and then the functional components of the state-of-the-art models.
-Finally, we will present our proposal for a new, stable and end-to-end trainable JEPA model.
+Finally, we will present our proposal for a new, stable, and end-to-end trainable JEPA model.
 
 ---
 
@@ -60,7 +60,7 @@ Some common solutions are:
 $$
     \mathcal{L}(\theta) = \sum_{i=1}^n \log \frac{p_\theta(y_i | x)}{p_\theta(y_i | x) + kp_k(y_i|x)} + \sum_{j=1}^m \log \frac{p_k(y_j | x)}{p_\theta(y_j | x) + kp_k(y_j|x)}
 $$
-where $k$ is the number of negative samples, $p_k$ their distribution, $n$ the number of positives and $p_\theta$ their distribution.
+where $k$ is the number of negative samples, $p_k$ their distribution, $n$ the number of positives, and $p_\theta$ their distribution.
 This loss reduces the problem to a binary classification (similar/dissimilar).
 
 * **Info Noise-contrastive estimation (NCE)**
@@ -68,7 +68,7 @@ This loss reduces the problem to a binary classification (similar/dissimilar).
 $$
     \mathcal{L}(\theta) = -\log \frac{\exp(\frac{q \cdot k^+}{\tau})}{\sum_{i=0}^K \exp{\frac{q \cdot k_i}{\tau}} }
 $$
-where $q$ is the embedding of the ancor, $k^+$ is the embedding of the (unique) positive sample and $K$ is the set of the (multiple) negatives.
+where $q$ is the embedding of the ancor, $k^+$ is the embedding of the (unique) positive sample, and $K$ is the set of the (multiple) negatives.
 Its goal is to maximize the mutual information between positive samples pairs while minimizing the mutual information between negative samples pairs.
 InfoNCE Loss has been used in the *MoCo* architecture.
 
@@ -253,9 +253,12 @@ Arcade-Videogame JEPA (AV-JEPA) is our framework.
 
 ### The Core Idea
 
-Current implementations of Joint-Embedding Predictive Architectures (JEPAs) operating in control environments suffer from a fundamental architectural decoupling. Typically, the framework relies on a strict two-stage protocol: first, the visual encoder and transition predictor are trained entirely offline in a reward-free, action-passive environment; second, these world model modules are structurally frozen, and a downstream policy optimizer utilizes the static latent embeddings for action planning (e.g., via zero-order solvers like the Cross-Entropy Method).
-
-This operational separation creates a distinct barrier between representation learning and environmental interaction. Biological entities do not passively construct complete, high-fidelity internal models of physics before executing motor control. Instead, sensorimotor representations develop concurrently *through* active exploration—understanding environment dynamics is inherently tied to the actions used to probe them: just think of a baby. He does not learn how the world works and *after* how to act in it, but rather he learns how to move *while* understanding the world dynamics.
+Current implementations of Joint-Embedding Predictive Architectures (JEPAs) operating in control environments suffer from a fundamental architectural decoupling. \
+Typically, the framework relies on a two-steps protocol: first, the visual encoder and the predictor are trained offline in a reward-free, action-passive environment; second, these modules are frozen, and a downstream policy optimizer exploits the static latent embeddings for action planning (e.g., via zero-order solvers like the Cross-Entropy Method). \
+This separation creates a barrier between representation learning and environmental interaction. \
+Biological entities do not passively construct complete, high-fidelity internal models of physics before executing motor control. 
+Instead, representations develop concurrently *through* active exploration, so that understanding environment dynamics is inherently tied to the actions used. \
+Think of a baby: he does not learn how the world works and *after* how to act in it, but rather he learns how to move *while* understanding the world dynamics.
 
 **AV-JEPA (Active-Vision JEPA)** addresses this limitation by introducing a fully unified, end-to-end trainable framework that simultaneously optimizes state representation, dynamics prediction, and policy execution.
 
@@ -263,9 +266,12 @@ This operational separation creates a distinct barrier between representation le
 
 ### Related Work
 
-The paradigm shift toward active, end-to-end world modeling within joint-embedding spaces is a rapidly developing frontier. Key contemporary frameworks exploring this axis include:
+The paradigm shift toward active, end-to-end world modeling within joint-embedding spaces is a rapidly developing frontier. \
+Key contemporary frameworks exploring this axis include:
 
-* **TD-JEPA (Temporal Difference JEPA):** Integrates temporal difference learning directly into the embedding space to align value estimation with predictive features.
+* **TD-JEPA (Temporal Difference JEPA):** Integrates temporal-difference (TD) learning directly into the embedding space to align value estimation with predictive features. \
+    To avoid the collapse of the model, they exploit two different pairs of teacher-student networks, acting as respectively as a target and an online network (same idea of Double DQN). \
+    The main difference with our approach is that we try to avoid this brilliant, yet redundant, double structure.
 * **ACT-JEPA (Action-Conditioned Transformer JEPA):** Focuses on explicit action-tokenization patterns inside the predictive backend to enforce behavioral alignment in latent spaces.
 
 ### Architectural Components
@@ -273,8 +279,8 @@ The paradigm shift toward active, end-to-end world modeling within joint-embeddi
 AV-JEPA consists of three jointly optimized components:
 
 1. **The Encoder ($\mathcal{E}_\theta$):** Maps raw high-dimensional pixel observations $o_t$ into a low-dimensional latent state representation $z_t = \mathcal{E}_\theta(o_t)$. (Adopts the standard $\text{ViT-Tiny}$ backbone).
-2. **The Predictor ($\mathcal{P}_\phi$):** An action-conditioned causal transformer that autoregressively models environment transitions in the latent space: $\hat{z}_{t+1} = \mathcal{P}_\phi(z_{\le t}, a_t)$. Action conditioning is injected dynamically using Adaptive Layer Normalization (`adaLN-Zero`).
-3. **The Policy Head ($\Pi_\psi$):** An active control module modeled as a Deep Q-Network (DQN) with an $\epsilon$-greedy exploration strategy. $\Pi_\psi$ maps either the current embedding $z_t$ (or an imagined short-horizon rollout sequence $\hat{z}_{t:t+H}$) to discrete action spaces.
+2. **The Predictor ($\mathcal{P}_\phi$):** An action-conditioned causal transformer that autoregressively models environment transitions in the latent space: $\hat{z}_{t+1} = \mathcal{P}_\phi(z_{\le t}, a_t)$. Action conditioning is injected dynamically using Adaptive Layer Normalization (`AdaLN-Zero`).
+3. **The Policy Head ($\Pi_\psi$):** An active control module modeled as a Deep Q-Network (DQN) with an $\varepsilon$-greedy exploration strategy. $\Pi_\psi$ maps either the current embedding $z_t$ (or an imagined short-horizon rollout sequence $\hat{z}_{t:t+H}$) to discrete action spaces.
 
 Consider that AV-JEPA aims to work in arcade-videogame like environments, where rewards are easy to model.
 
@@ -282,13 +288,13 @@ Consider that AV-JEPA aims to work in arcade-videogame like environments, where 
 
 The global optimization framework operates over a multi-task objective function:
 
-$$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{pred}} + \lambda_t \cdot \text{SIGReg}(Z) + \gamma \cdot \mathcal{L}_{\text{policy}}$$
+$$\mathcal{L}_{\text{total}} = \mathcal{L}_{\mathcal{P}} + \lambda_t \cdot \text{SIGReg}(Z) + \lambda_\Pi \cdot \mathcal{L}_{\Pi}$$
 
 Where:
 
-* **$\mathcal{L}_{\text{pred}}$** is the teacher-forced mean-squared error (MSE) of the dynamics transition: $\|\hat{z}_{t+1} - z_{t+1}\|_2^2$.
+* **$\mathcal{L}_{\mathcal{P}}$** is the teacher-forced mean-squared error (MSE) of the dynamics transition: $\|\hat{z}_{t+1} - z_{t+1}\|_2^2$.
 * **$\text{SIGReg}(Z)$** is the Sketched-Isotropic-Gaussian Regularizer preventing representation collapse by optimizing the Epps-Pulley normality statistic over random univariate projections.
-* **$\mathcal{L}_{\text{policy}}$** minimizes the temporal difference error of the expected cumulative reward $R_t$, maximizing $\mathbb{E}[\sum \gamma^k r_{t+k}]$.
+* **$\mathcal{L}_{\Pi}$** minimizes the temporal difference error of the expected cumulative reward $R_t$, maximizing $\mathbb{E}[\sum \gamma^k r_{t+k}]$.
 
 ### Main Experimental Details
 
@@ -298,7 +304,7 @@ While developing the AV-Jepa we had some novels idea that we decided to explore.
 
 To protect the latent space from collapsing or adapting prematurely to a narrow, sub-optimal policy sub-space, we are gonna try to use an annealed exploration schedule:
 
-* **Phase I (Representation Priming):** The policy-head exploration factor is set to maximum ($\epsilon \to 1.0$), forcing the agent to act as a fully random explorer. This ensures wide state-space coverage, allowing $\mathcal{E}_\theta$ and $\mathcal{P}_\phi$ to construct a stable, generalized structural understanding of the environment's physics.
+* **Phase I (Representation Priming):** The policy-head exploration factor is set to maximum ($\varepsilon \to 1.0$), forcing the agent to act as a fully random explorer. This ensures wide state-space coverage, allowing $\mathcal{E}_\theta$ and $\mathcal{P}_\phi$ to construct a stable, generalized structural understanding of the environment's physics.
 * **Phase II (Exploitation Convergence):** The exploration temperature is progressively annealed. As the latent space stabilizes, $\Pi_\psi$ is forced to exploit its learned features, shifting behaviors toward reward maximization.
 
 #### Latent Prior Relaxation (SIGReg Modulation)
@@ -311,13 +317,24 @@ We try to, rather than removing the regularizer abruptly (which risks immediate 
 A core experimental branch of AV-JEPA investigates the topological effects of backpropagating the prediction gradient through the policy head.
 
 * **Isolated Configuration (Stop-Gradient):** $\Pi_\psi$ updates exclusively through reward-driven TD-errors, maintaining independence from the world model's internal representation error.
-* **Coupled Configuration:** Flowing $\mathcal{L}_{\text{pred}}$ gradients directly into the policy parameters introduces a homeostatic inductive bias. The policy is implicitly penalized for choosing chaotic, unpredictable actions, inherently prioritizing trajectories where the world model's forward simulation maintains high certainty.
+* **Coupled Configuration:** Flowing $\mathcal{L}_{\text{pred}}$ gradients directly into the policy parameters introduces a homeostatic inductive bias. The policy is implicitly penalized for choosing chaotic, unpredictable actions, inherently prioritizing trajectories where the world model's forward simulation maintains high certainty. \
+    This approach seems more intriguing and "realistic", but also raises questions about convergence and loss stability
 
 ### Considerations
 
-We already know in advance that adding the policy learning will lead to a lot of instability, problems and complications.
-The first consideration is that the policy brings a bunch of hyperparameters which must be set somehow.
-The second consideration is that the policy bring computation requirements which were not requested before.
+- We already know in advance that adding the policy learning will lead to a lot of instability, problems, and complications.
+- Policy brings computation requirements which were not requested before.
+- Policy brings a bunch of hyperparameters which must be set somehow. \
+  In particular, the choice of the $\lambda_\Pi$ hyperparam governing the impact of the policy loss is key since it rescales the loss to something comparable with the prediction loss. \
+  It is reasonable to think to the policy loss $\mathcal{L}_\Pi$ to become increasingly relevant for the computation. Thus, instead of having decoupled weights, my (Enrico) suggestion is to set:
+$$
+    \mathcal{L}_T = \alpha_t \mathcal{L}_{\mathcal{P}} + (1-\alpha_t) \cdot \lambda_\Pi \cdot \mathcal{L}_{\Pi} + \lambda_t \cdot \text{SIGReg(Z)}
+$$
+    with $\alpha_t$ inverse function of the iteration, and $\lambda_\Pi$ a simple regularizer, e.g., set so that the mean of the previous $K$ $\mathcal{L}_{\mathcal{P}}$ has the same order of magnitude of the previous $K$ $\lambda_\Pi^- \mathcal{L}_{\Pi}$.
+- Give a glance to DeepMind Control Suite, especially for the Maze environment. They are standard in RL tasks.
+- It is not clear to me (Enrico) the relevance of a *periodic* schedule for the regularization coefficient $\lambda_t$.
+
+
 
 ---
 
