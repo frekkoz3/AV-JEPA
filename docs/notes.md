@@ -173,7 +173,7 @@ The Architecture Setup:
 * **Predictor**: Takes the context embedding ($s_x$) and tries to mathematically predict what the target embedding ($s_y$) will look like.
 * **Information Filtering**: By predicting in the embedding space, the encoders naturally discard irrelevant, unpredictable background noise (e.g., the exact movement of leaves on a tree or ripples in water) and focus only on the structural, causal features of the scene (e.g., the trajectory of a moving car).
 
-![jepa-framework](jepa_framework.png)
+![jepa-framework](imgs/jepa_framework.png)
 
 An important point one must understand is that **JEPA is not designed to write essays or paint pictures**; it is designed to be the **"cognitive engine" for an agent**.
 
@@ -259,21 +259,72 @@ To determine if the latent states captured actual physical characteristics, froz
 ---
 
 ## AV-JEPA
-Our model aims to overcome a limit of current JEPA models. \
-When JEPA is used to take actions in the real world, the training of the architecture consists of two steps: the encoder and the predictor modules are trained at first, without considering the action space nor the policy, which is optimized only in a second moment while the state modules are frozen. \
-This separation may be critical, since it disentangles two faces of the same medal. If you think of a baby, he does not learn how the world works and *after* how to act in it, but rather he learns how to move *while* understanding the world dynamics. \
-This is exactly what we are trying to do in AV-JEPA: implement a JEPA that is trainable end-to-end, all together.
 
-Literature is delving increasing interest on this specific detail of JEPA. \
-Remarkable results are:
-- **TD-JEPA**
-- **ACT-JEPA**
+### The Core Idea
 
+Current implementations of Joint-Embedding Predictive Architectures (JEPAs) operating in control environments suffer from a fundamental architectural decoupling. Typically, the framework relies on a strict two-stage protocol: first, the visual encoder and transition predictor are trained entirely offline in a reward-free, action-passive environment; second, these world model modules are structurally frozen, and a downstream policy optimizer utilizes the static latent embeddings for action planning (e.g., via zero-order solvers like the Cross-Entropy Method).
 
-Practically speaking, we have three model to train: the encoder, $\mathcal{E}$, the predictor, $\mathcal{P}$, and the policy model $\Pi$. \
-For the first two, we decided to keep the same architectures of LeWorldModel, since they are a standard and have shown incredible performances. \
-For the policy ... $\BHO\?$
+This operational separation creates a distinct barrier between representation learning and environmental interaction. Biological entities do not passively construct complete, high-fidelity internal models of physics before executing motor control. Instead, sensorimotor representations develop concurrently *through* active exploration—understanding environment dynamics is inherently tied to the actions used to probe them: just think of a baby. He does not learn how the world works and *after* how to act in it, but rather he learns how to move *while* understanding the world dynamics.
 
+**AV-JEPA (Active-Vision JEPA)** addresses this limitation by introducing a fully unified, end-to-end trainable framework that simultaneously optimizes state representation, dynamics prediction, and policy execution.
+
+![jepa-framework](imgs/AV-JEPA%20Framework.png)
+
+### Related Work
+
+The paradigm shift toward active, end-to-end world modeling within joint-embedding spaces is a rapidly developing frontier. Key contemporary frameworks exploring this axis include:
+
+* **TD-JEPA (Temporal Difference JEPA):** Integrates temporal difference learning directly into the embedding space to align value estimation with predictive features.
+* **ACT-JEPA (Action-Conditioned Transformer JEPA):** Focuses on explicit action-tokenization patterns inside the predictive backend to enforce behavioral alignment in latent spaces.
+
+### Architectural Components
+
+AV-JEPA consists of three jointly optimized components:
+
+1. **The Encoder ($\mathcal{E}_\theta$):** Maps raw high-dimensional pixel observations $o_t$ into a low-dimensional latent state representation $z_t = \mathcal{E}_\theta(o_t)$. (Adopts the standard $\text{ViT-Tiny}$ backbone).
+2. **The Predictor ($\mathcal{P}_\phi$):** An action-conditioned causal transformer that autoregressively models environment transitions in the latent space: $\hat{z}_{t+1} = \mathcal{P}_\phi(z_{\le t}, a_t)$. Action conditioning is injected dynamically using Adaptive Layer Normalization (`adaLN-Zero`).
+3. **The Policy Head ($\Pi_\psi$):** An active control module modeled as a Deep Q-Network (DQN) with an $\epsilon$-greedy exploration strategy. $\Pi_\psi$ maps either the current embedding $z_t$ (or an imagined short-horizon rollout sequence $\hat{z}_{t:t+H}$) to discrete action spaces.
+
+### Optimization Objectives
+
+The global optimization framework operates over a multi-task objective function:
+
+$$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{pred}} + \lambda_t \cdot \text{SIGReg}(Z) + \gamma \cdot \mathcal{L}_{\text{policy}}$$
+
+Where:
+
+* **$\mathcal{L}_{\text{pred}}$** is the teacher-forced mean-squared error (MSE) of the dynamics transition: $\|\hat{z}_{t+1} - z_{t+1}\|_2^2$.
+* **$\text{SIGReg}(Z)$** is the Sketched-Isotropic-Gaussian Regularizer preventing representation collapse by optimizing the Epps-Pulley normality statistic over random univariate projections.
+* **$\mathcal{L}_{\text{policy}}$** minimizes the temporal difference error of the expected cumulative reward $R_t$, maximizing $\mathbb{E}[\sum \gamma^k r_{t+k}]$.
+
+### Main Experimental Details
+
+While developing the AV-Jepa we had some novels idea that we decided to explore. Here the main ones:
+
+#### Phase-Based Exploration (Temperature Scheduling)
+
+To protect the latent space from collapsing or adapting prematurely to a narrow, sub-optimal policy sub-space, we are gonna try to use an annealed exploration schedule:
+
+* **Phase I (Representation Priming):** The policy-head exploration factor is set to maximum ($\epsilon \to 1.0$), forcing the agent to act as a fully random explorer. This ensures wide state-space coverage, allowing $\mathcal{E}_\theta$ and $\mathcal{P}_\phi$ to construct a stable, generalized structural understanding of the environment's physics.
+* **Phase II (Exploitation Convergence):** The exploration temperature is progressively annealed. As the latent space stabilizes, $\Pi_\psi$ is forced to exploit its learned features, shifting behaviors toward reward maximization.
+
+#### Latent Prior Relaxation (SIGReg Modulation)
+
+While an Isotropic Gaussian prior ensures excellent feature diversity and prevents collapse, it can occasionally over-constrain the geometric complexity of the latent manifold in intricate environments.
+We try to, rather than removing the regularizer abruptly (which risks immediate representation collapse), implement a periodic relaxation schedule for the regularization coefficient $\lambda_t$. During later operational epochs, $\lambda_t$ is dynamically scaled down, allowing the latent topology to warp and develop higher-dimensional semantic complexities tailored directly to the optimal policy layout.
+
+#### Gradient Isolation vs. End-to-End Coupling
+
+A core experimental branch of AV-JEPA investigates the topological effects of backpropagating the prediction gradient through the policy head.
+
+* **Isolated Configuration (Stop-Gradient):** $\Pi_\psi$ updates exclusively through reward-driven TD-errors, maintaining independence from the world model's internal representation error.
+* **Coupled Configuration:** Flowing $\mathcal{L}_{\text{pred}}$ gradients directly into the policy parameters introduces a homeostatic inductive bias. The policy is implicitly penalized for choosing chaotic, unpredictable actions, inherently prioritizing trajectories where the world model's forward simulation maintains high certainty.
+
+### Considerations
+
+We already know in advance that adding the policy learning will lead to a lot of instability, problems and complications.
+The first consideration is that the policy brings a bunch of hyperparameters which must be set somehow.
+The second consideration is that the policy bring computation requirements which were not requested before.
 
 ---
 
