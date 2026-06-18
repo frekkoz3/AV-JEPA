@@ -15,7 +15,7 @@ import pygame
 import random
 import os
 
-CELL_SIZE = 60
+CELL_SIZE = 50
 GRID_WIDTH, GRID_HEIGHT = 20, 20  
 WIDTH, HEIGHT = GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE
 RESOURCES_PATH = "src/game/resources/"
