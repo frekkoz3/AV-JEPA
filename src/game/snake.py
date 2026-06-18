@@ -3,7 +3,7 @@ r"""
 ▒▒███▒▒▒▒▒█ ███▒▒▒▒███▒▒███▒▒▒▒▒█                 ▒▒███ ▒▒███▒▒▒▒▒█▒▒███▒▒▒▒▒███  ███▒▒▒▒▒███ 
  ▒███  █ ▒ ▒▒▒    ▒███ ▒███  █ ▒                   ▒███  ▒███  █ ▒  ▒███    ▒███ ▒███    ▒███ 
  ▒██████      ███████  ▒██████    ██████████       ▒███  ▒██████    ▒██████████  ▒███████████ 
- ▒███▒▒█     ███▒▒▒▒   ▒███▒▒█   ▒▒▒▒▒▒▒▒▒▒        ▒███  ▒███▒▒█    ▒███▒▒▒▒▒▒   ▒███▒▒▒▒▒███ 
+ ▒███▒▒█     ███▒▒▒▒   ▒███▒▒█     ▒▒▒▒▒▒▒▒▒▒        ▒███  ▒███▒▒█    ▒███▒▒▒▒▒▒   ▒███▒▒▒▒▒███ 
  ▒███ ▒   █ ███      █ ▒███ ▒   █            ███   ▒███  ▒███ ▒   █ ▒███         ▒███    ▒███ 
  ██████████▒██████████ ██████████           ▒▒████████   ██████████ █████        █████   █████
 ▒▒▒▒▒▒▒▒▒▒ ▒▒▒▒▒▒▒▒▒▒ ▒▒▒▒▒▒▒▒▒▒             ▒▒▒▒▒▒▒▒   ▒▒▒▒▒▒▒▒▒▒ ▒▒▒▒▒        ▒▒▒▒▒   ▒▒▒▒▒ 
@@ -17,36 +17,27 @@ import os
 
 CELL_SIZE = 40
 GRID_WIDTH, GRID_HEIGHT = 20, 20
-WIDTH, HEIGHT = GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE
+WIDTH = GRID_WIDTH * CELL_SIZE
+GAME_HEIGHT = GRID_HEIGHT * CELL_SIZE
+BAR_HEIGHT = 50  # Height of the top status bar
+TOTAL_HEIGHT = GAME_HEIGHT + BAR_HEIGHT
+
 RESOURCES_PATH = "src/game/resources/"
 
 class SnakeEnv(gym.Env):
-    """
-    Environemnt for the snake game.
-    Follows gym protocol.
-    Possible observation format: 
-        - raw image
-        - grid
-    For now there is only 1 difficulty.
-    """
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 10}
 
-    def __init__(self, render_mode=None, max_step=100, observation_type="grid", **kwargs):
-        """
-        Args:
-            render_mode: "human" (visible window) or "rgb_array" (headless frame rendering).
-            observation_type: "grid" for the 2D numeric grid, or "image" to return the raw 
-                              visual RGB frame directly inside get_obs() / step() / reset().
-        """
+    def __init__(self, render_mode=None, max_step=100, observation_type="grid", difficulty=0, **kwargs):
         assert GRID_HEIGHT >= 10
         assert GRID_WIDTH >= 10
         self.action_space = spaces.Discrete(4)  # 0=UP, 1=DOWN, 2=LEFT, 3=RIGHT
         self.render_mode = render_mode
         self.observation_type = observation_type
+        self.difficulty = max(0, min(difficulty, 3)) # Clamp difficulty between 0 and 3
         
         if self.observation_type == "image":
             self.observation_space = spaces.Box(
-                low=0, high=255, shape=(HEIGHT, WIDTH, 3), dtype=np.uint8
+                low=0, high=255, shape=(TOTAL_HEIGHT, WIDTH, 3), dtype=np.uint8
             )
         else:
             self.observation_space = spaces.Box(
@@ -56,6 +47,7 @@ class SnakeEnv(gym.Env):
         self.window = None
         self.canvas = None  
         self.clock = None
+        self.font = None
         self.total_step = 0
         self.score = 0         
         self.max_step = max_step
@@ -81,7 +73,7 @@ class SnakeEnv(gym.Env):
         self.sprites = {}
         
         for color in ["red", "green", "yellow"]:
-            for piece in ["head", "body", "tail", "ul", "ur", "dl", "dr", "apple"]: # up_left, up_right, down_left, down_right
+            for piece in ["head", "body", "tail", "ul", "ur", "dl", "dr", "apple"]:
                 self.sprites[f"{color}_{piece}"] = load_sp(f"{RESOURCES_PATH}{color}/{piece}.png")
 
         grass_categories = ["neutral", "flower", "white"]
@@ -92,7 +84,7 @@ class SnakeEnv(gym.Env):
                 self.sprites[f"{piece}_{i}"] = load_sp(f"{RESOURCES_PATH}grass/{piece}_{i}.png")
                 i += 1
 
-        self.grass_background = pygame.Surface((WIDTH, HEIGHT))
+        self.grass_background = pygame.Surface((WIDTH, GAME_HEIGHT))
 
         neutral_tiles = [k for k in self.sprites.keys() if "neutral" in k]
         flower_tiles = [k for k in self.sprites.keys() if "flower" in k]
@@ -121,7 +113,6 @@ class SnakeEnv(gym.Env):
         start_x = self.snake[0][0]
         start_y = self.snake[0][1]
 
-        # Start pointing toward the center
         center_x, center_y = GRID_WIDTH // 2, GRID_HEIGHT // 2
         
         if abs(start_x - center_x) > abs(start_y - center_y):
@@ -207,7 +198,7 @@ class SnakeEnv(gym.Env):
         if new_head == self.food:
             self.score += 1
             reward = self.reward_food
-            self.current_snake_color = self.current_apple_type.split("_")[0] # first part is the color
+            self.current_snake_color = self.current_apple_type.split("_")[0]
             self.current_apple_type = self._random_apple()
             self._place_food()
         else:
@@ -228,38 +219,61 @@ class SnakeEnv(gym.Env):
 
     def _render_frame(self):
         """Internal worker function that draws the frame onto the canvas."""
-        # Ensure a Video Mode is initialized BEFORE loading sprites to avoid convert_alpha() crashing
         if self.window is None and self.canvas is None:
             pygame.init()
+            pygame.font.init()
+
+            font_path = os.path.join(RESOURCES_PATH, "font", "minecraft", "Minecraft.ttf")
+            
+            try:
+                self.font = pygame.font.Font(font_path, 16)
+            except FileNotFoundError:
+                print(f"Warning: Custom font not found at {font_path}. Falling back to Arial.")
+                self.font = pygame.font.SysFont("Arial", 24, bold=True)
+            
             if self.render_mode == "human":
-                self.window = pygame.display.set_mode((WIDTH, HEIGHT))
+                self.window = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT))
                 pygame.display.set_caption("Snake Environment")
                 self.clock = pygame.time.Clock()
             else:
-                # Setup a hidden video mode back-buffer if running headless for a model
                 os.environ["SDL_VIDEODRIVER"] = "dummy"
                 try:
-                    self.canvas = pygame.display.set_mode((WIDTH, HEIGHT), pygame.HIDDEN)
+                    self.canvas = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT), pygame.HIDDEN)
                 except pygame.error:
-                    # Fallback
-                    self.canvas = pygame.display.set_mode((WIDTH, HEIGHT))
+                    self.canvas = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT))
 
         if not self.sprites_loaded:
             self._load_and_scale_sprites()
 
         paint_surface = self.window if self.render_mode == "human" else self.canvas
         
+        paint_surface.fill((40, 40, 40))
+        
+        total_seconds = self.total_step // self.metadata["render_fps"]
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        time_str = f"{minutes:02d}.{seconds:02d}"
+
+        diff_text = self.font.render(f"Difficulty {self.difficulty}", True, (255, 255, 255))
+        score_text = self.font.render(f"Score {self.score}", True, (255, 215, 0))
+        time_text = self.font.render(f"Time {time_str}", True, (255, 255, 255))
+        
+        text_y = (BAR_HEIGHT - diff_text.get_height()) // 2
+        paint_surface.blit(diff_text, (20, text_y))
+        paint_surface.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, text_y))
+        paint_surface.blit(time_text, (WIDTH - time_text.get_width() - 20, text_y))
+
         # Grass
-        paint_surface.blit(self.grass_background, (0, 0))
+        paint_surface.blit(self.grass_background, (0, BAR_HEIGHT))
 
         # Food
         food_x, food_y = self.food
-        paint_surface.blit(self.sprites[self.current_apple_type], (food_x * CELL_SIZE, food_y * CELL_SIZE))
+        paint_surface.blit(self.sprites[self.current_apple_type], (food_x * CELL_SIZE, food_y * CELL_SIZE + BAR_HEIGHT))
 
         # Snake
         for i, segment in enumerate(self.snake):
             x, y = segment
-            screen_pos = (x * CELL_SIZE, y * CELL_SIZE)
+            screen_pos = (x * CELL_SIZE, y * CELL_SIZE + BAR_HEIGHT)
 
             # Head
             if i == 0:
@@ -326,10 +340,10 @@ class SnakeEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    
-    # Usage with human interface
+    # Usage with human interface and difficulty set to 2
     env = SnakeEnv(render_mode="human",
                    observation_type="grid",
+                   difficulty=2,
                    max_step=500)
     obs, info = env.reset()
 
@@ -348,17 +362,3 @@ if __name__ == "__main__":
         if not env.render():
             break
     env.close()
-
-    # Usage with headless interface
-    headless_env = SnakeEnv(render_mode=None,
-                            observation_type="image",
-                            max_step=100)
-    
-    img_obs, info = headless_env.reset()
-    # print("Initial image observation shape:", img_obs.shape)
-    
-    for _ in range(100):
-        random_action = headless_env.action_space.sample()
-        img_obs, rew, done, trunc, info = headless_env.step(random_action)
-    
-    headless_env.close()
