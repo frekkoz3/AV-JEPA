@@ -234,7 +234,20 @@ class SnakeEnv(gym.Env):
             self._load_and_scale_sprites()
 
         paint_surface = self.window if self.render_mode == "human" else self.canvas
-        paint_surface.fill((0, 0, 0))
+        
+        for row in range(GRID_HEIGHT):
+            for col in range(GRID_WIDTH):
+                # Alternate colors
+                if (row + col) % 2 == 0:
+                    color = (34, 139, 34)  # Forest Green
+                else:
+                    color = (50, 205, 50)   # Lime Green
+                
+                pygame.draw.rect(
+                    paint_surface, 
+                    color, 
+                    (col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+                )
 
         # Food
         food_x, food_y = self.food
