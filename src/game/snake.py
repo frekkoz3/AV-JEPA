@@ -14,11 +14,8 @@ import numpy as np
 import pygame
 import random
 import os
-import torch
 
-from src.policy.policy import Policy
-
-CELL_SIZE = 50
+CELL_SIZE = 40
 GRID_WIDTH, GRID_HEIGHT = 20, 20
 WIDTH, HEIGHT = GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE
 RESOURCES_PATH = "src/game/resources/"
@@ -87,6 +84,35 @@ class SnakeEnv(gym.Env):
             for piece in ["head", "body", "tail", "ul", "ur", "dl", "dr", "apple"]: # up_left, up_right, down_left, down_right
                 self.sprites[f"{color}_{piece}"] = load_sp(f"{RESOURCES_PATH}{color}/{piece}.png")
 
+        grass_categories = ["neutral", "flower", "white"]
+
+        for piece in grass_categories:
+            i = 1
+            while os.path.exists(f"{RESOURCES_PATH}grass/{piece}_{i}.png"):
+                self.sprites[f"{piece}_{i}"] = load_sp(f"{RESOURCES_PATH}grass/{piece}_{i}.png")
+                i += 1
+
+        self.grass_background = pygame.Surface((WIDTH, HEIGHT))
+
+        neutral_tiles = [k for k in self.sprites.keys() if "neutral" in k]
+        flower_tiles = [k for k in self.sprites.keys() if "flower" in k]
+        white_tiles = [k for k in self.sprites.keys() if "white" in k]
+
+        weights = [6, 3, 1]
+
+        for row in range(GRID_HEIGHT):
+            for col in range(GRID_WIDTH):
+                chosen_category = random.choices(grass_categories, weights=weights, k=1)[0]
+                
+                if chosen_category == "neutral":
+                    tile = random.choice(neutral_tiles)
+                elif chosen_category == "flower":
+                    tile = random.choice(flower_tiles)
+                else:
+                    tile = random.choice(white_tiles)
+                
+                self.grass_background.blit(self.sprites[tile], (col * CELL_SIZE, row * CELL_SIZE))
+
         self.sprites_loaded = True
 
     def reset(self, seed=None, options=None):
@@ -95,14 +121,12 @@ class SnakeEnv(gym.Env):
         start_x = self.snake[0][0]
         start_y = self.snake[0][1]
 
-        # Determine which direction points toward the center
+        # Start pointing toward the center
         center_x, center_y = GRID_WIDTH // 2, GRID_HEIGHT // 2
         
         if abs(start_x - center_x) > abs(start_y - center_y):
-            # Move horizontally toward center
             self.direction = (1, 0) if start_x < center_x else (-1, 0)
         else:
-            # Move vertically toward center
             self.direction = (0, 1) if start_y < center_y else (0, -1)
 
         self.current_snake_color = self._random_color()
@@ -225,19 +249,8 @@ class SnakeEnv(gym.Env):
 
         paint_surface = self.window if self.render_mode == "human" else self.canvas
         
-        for row in range(GRID_HEIGHT):
-            for col in range(GRID_WIDTH):
-                # Alternate colors
-                if (row + col) % 2 == 0:
-                    color = (34, 139, 34)  # Forest Green
-                else:
-                    color = (50, 205, 50)   # Lime Green
-                
-                pygame.draw.rect(
-                    paint_surface, 
-                    color, 
-                    (col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-                )
+        # Grass
+        paint_surface.blit(self.grass_background, (0, 0))
 
         # Food
         food_x, food_y = self.food
@@ -320,25 +333,9 @@ if __name__ == "__main__":
                    max_step=500)
     obs, info = env.reset()
 
-    # N.B. DUE to memory constraints, if you set the policy, you need to also set CELL_SIZE = 1
-    policy = Policy(input_dim=3*GRID_WIDTH*GRID_HEIGHT,
-                    output_dim=4,
-                    network="AttentionDQN",
-                    num_attention_layer=2,
-                    attention_layer_params=[{"num_heads": 4}, {"num_heads": 4}],
-                    num_fc_layer=2,
-                    dim_fc_layer=[192, 32],
-                    epsilon_strategy="EpsilonGreedy",
-                    epsilon_start=1.0,
-                    coeff=0.995,
-                    epsilon_end=0.1)
-    
-    dir_mapping = {(0, -1): 0, (0, 1): 1, (-1, 0): 2, (1, 0): 3}
-    inv_mapping = {v: k for k, v in dir_mapping.items()}
-    current_action = dir_mapping.get(env.direction, 0)
-
     done = False
     trunc = False
+    current_action = 0
     while not done and not trunc:
         if env.window is not None:
             for event in pygame.event.get(pygame.KEYDOWN):
