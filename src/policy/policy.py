@@ -166,7 +166,7 @@ class Policy:
         """Sets the epsilon-greedy strategy for exploration."""
         maps = {
             "EpsilonGreedy": EpsilonGreedy,
-            "EpsilonConstant": lambda x,**kwargs: EpsilonGreedy(epsilon_start = kwargs.get("epsilon_start", 1.0),
+            "EpsilonConstant": lambda **kwargs: EpsilonGreedy(epsilon_start = kwargs.get("epsilon_start", 1.0),
                                                               epsilon_coeff= 1.0,
                                                               epsilon_end = kwargs.get("epsilon_end", 0.0))
         }
@@ -174,7 +174,7 @@ class Policy:
         # Assertions
         assert epsilon_strategy in maps, \
             f"Epsilon strategy '{epsilon_strategy}' is not supported. Supported strategies are: {list(maps.keys())}."
-        assert "epsilon_start" in kwargs and "coeff" in kwargs and "epsilon_end" in kwargs, \
+        assert "epsilon_start" in kwargs and "epsilon_coeff" in kwargs and "epsilon_end" in kwargs, \
             f"EpsilonGreedy requires 'epsilon_start', 'coeff', and 'epsilon_end' parameters."
 
         self.epsilon_strategy = maps[epsilon_strategy](**kwargs)
@@ -210,7 +210,7 @@ class Policy:
     def set_loss(self, loss : str, **kwargs):
         """Sets the loss function for training the network."""
         maps = {
-            "MSELoss": torch.nn.MSELoss,
+            "MSELoss": MSELoss,
             "PPOLoss": PPOLoss,
             "A2CLoss": A2CLoss
         }
@@ -219,6 +219,7 @@ class Policy:
         assert loss in maps, \
             f"Loss function '{loss}' is not supported. Supported loss functions are: {list(maps.keys())}."
 
+        print(f"Using loss function: {loss}")
         self.loss = maps[loss](**kwargs)
 
 
@@ -262,8 +263,17 @@ class Policy:
             If False, applies epsilon-greedy strategy to select an action.
         """
         state_tensor = state if isinstance(state, torch.Tensor) else torch.tensor(state, dtype=torch.float32, device=self.device)
-        if state_tensor.dim() == 2: # Add sequence/channel dim if missing
+        # 1. Flatten the 2D grid from the environment (20, 20) -> (400)
+        if state_tensor.shape == (20, 20):
+            state_tensor = state_tensor.flatten()
+
+        # 2. Add Batch dimension (400) -> (1, 400)
+        if state_tensor.dim() == 1:
             state_tensor = state_tensor.unsqueeze(0)
+
+        # 3. Add Channel dimension specifically for Convolutional Networks -> (1, 1, 400)
+        if isinstance(self.network, (ConvDQN, ConvPPO, AttentionDQN, AttentionPPO)) and state_tensor.dim() == 2:
+            state_tensor = state_tensor.unsqueeze(1)
 
         is_policy_based = hasattr(self.network, 'actor_head')
 
@@ -326,6 +336,16 @@ class Policy:
         """DQN Optimization via Bellman Equation and Replay Buffer."""
         states, actions, rewards, next_states, dones = batch
 
+        # 1. Flatten the 2D grids: [batch_size, 20, 20] -> [batch_size, 400]
+        if states.dim() == 3 and states.shape[1:] == (20, 20):
+            states = states.view(states.shape[0], -1)
+            next_states = next_states.view(next_states.shape[0], -1)
+
+        # 2. Channel/Sequence dimension for Conv/Attention Networks -> [batch_size, 1, 400]
+        if isinstance(self.network, (ConvDQN, AttentionDQN)) and states.dim() == 2:
+            states = states.unsqueeze(1)
+            next_states = next_states.unsqueeze(1)
+
         # 1. Compute Current Q-values
         q_values = self.network(states)
         current_q = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
@@ -339,7 +359,8 @@ class Policy:
             target_q = rewards + (self.reward_discount * max_next_q * (1 - dones))
 
         # 3. Optimize
-        td_loss, _ = self.loss(current_q, target_q)
+        td_loss = self.loss(current_q, target_q)
+        print(f"TD Loss: {td_loss.item():.4f}, Mean Q: {current_q.mean().item():.4f}, Epsilon: {self.epsilon_strategy.eps:.4f}")
 
         self.optimizer.zero_grad()
         td_loss.backward()
@@ -362,7 +383,15 @@ class Policy:
 
         # 1. Trajectory Rollout (Data Collection)
         for _ in range(self.horizon):
-            state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
+            state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device)
+
+            # Format shape: Flatten and add Batch/Channel dimensions
+            if state_tensor.shape == (20, 20):
+                state_tensor = state_tensor.flatten()
+            if state_tensor.dim() == 1:
+                state_tensor = state_tensor.unsqueeze(0)
+            if isinstance(self.network, (ConvPPO, AttentionPPO)) and state_tensor.dim() == 2:
+                state_tensor = state_tensor.unsqueeze(1)
 
             with torch.no_grad():
                 dist, value = self.network(state_tensor)
@@ -392,7 +421,16 @@ class Policy:
 
         # 2. Generalized Advantage Estimation (GAE)
         with torch.no_grad():
-            last_state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
+            last_state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device)
+
+            # Format shape: Flatten and add Batch/Channel dimensions
+            if last_state_tensor.shape == (20, 20):
+                last_state_tensor = last_state_tensor.flatten()
+            if last_state_tensor.dim() == 1:
+                last_state_tensor = last_state_tensor.unsqueeze(0)
+            if isinstance(self.network, (ConvPPO, AttentionPPO)) and last_state_tensor.dim() == 2:
+                last_state_tensor = last_state_tensor.unsqueeze(1)
+
             _, last_value = self.network(last_state_tensor)
             last_value = last_value.squeeze(-1)
 
@@ -461,7 +499,9 @@ def main(config_path, train_flag):
     print(f"Initial action selected: {action}")
 
     if train_flag:
+        print("Starting training...")
         for episode in range(config.get("n_episodes", 100)):
+            print(f"Episode {episode + 1}/{config.get('n_episodes', 100)}")
             state = policy.environment.reset()[0]
             done = False
 
@@ -469,7 +509,7 @@ def main(config_path, train_flag):
             if isinstance(policy.network, (ConvPPO, AttentionPPO)):
                 policy.train(state)
             else:
-                # For DQN, we would typically sample a batch from a replay buffer here.
+                # For DQN, we need a replay buffer.
                 buffer = []
                 while not done:
                     action, _ = policy.get_action(state)
@@ -479,11 +519,11 @@ def main(config_path, train_flag):
 
                 # Convert buffer to batch tensors
                 states, actions, rewards, next_states, dones = zip(*buffer)
-                states = torch.tensor(states, dtype=torch.float32, device=policy.device)
-                actions = torch.tensor(actions, dtype=torch.int64, device=policy.device)
-                rewards = torch.tensor(rewards, dtype=torch.float32, device=policy.device)
-                next_states = torch.tensor(next_states, dtype=torch.float32, device=policy.device)
-                dones = torch.tensor(dones, dtype=torch.float32, device=policy.device)
+                states = torch.tensor(np.array(states), dtype=torch.float32, device=policy.device)
+                actions = torch.tensor(np.array(actions), dtype=torch.int64, device=policy.device)
+                rewards = torch.tensor(np.array(rewards), dtype=torch.float32, device=policy.device)
+                next_states = torch.tensor(np.array(next_states), dtype=torch.float32, device=policy.device)
+                dones = torch.tensor(np.array(dones), dtype=torch.float32, device=policy.device)
                 batch = (states, actions, rewards, next_states, dones)
 
                 policy.train(batch)

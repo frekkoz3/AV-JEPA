@@ -1,5 +1,15 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
+
+
+class MSELoss(nn.MSELoss):
+    """Overrides torch.nn.MSELoss to accept dummy **kwargs for compatibility"""
+
+    def __init__(self, **kwargs):
+        super().__init__()
+
+
 
 class A2CLoss:
     """Common Advantage-Actor Critic Loss"""
@@ -14,7 +24,8 @@ class A2CLoss:
                 actions,
                 returns,
                 entropy_coef=0.01,
-                critic_coef=0.5):
+                critic_coef=0.5,
+                **kwargs):
         """Compute the PPO loss given the distribution, values, actions, and returns."""
         values = values.squeeze(-1)
 
@@ -51,7 +62,8 @@ class PPOLoss:
                 old_log_probs,
                 clip_ratio=0.2,
                 entropy_coef=0.01,
-                critic_coef=0.5):
+                critic_coef=0.5,
+                **kwargs):
         """Compute the PPO loss given the distribution, values, returns, and old log probabilities."""
         values = values.squeeze(-1)
 
