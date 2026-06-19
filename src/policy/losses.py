@@ -57,7 +57,8 @@ class PPOLoss:
 
         # 2. Compute Advantage and Normalize it
         advantages = returns - values.detach()
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        if advantages.shape[0] > 1:
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         # 3. Calculate Policy Ratio
         new_log_probs = dist.log_prob(actions)
