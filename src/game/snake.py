@@ -15,25 +15,42 @@ import pygame
 import random
 import os
 
-CELL_SIZE = 40
+CELL_SIZE = 35
 GRID_WIDTH, GRID_HEIGHT = 20, 20
 WIDTH = GRID_WIDTH * CELL_SIZE
 GAME_HEIGHT = GRID_HEIGHT * CELL_SIZE
 BAR_HEIGHT = 50  # Height of the top status bar
 TOTAL_HEIGHT = GAME_HEIGHT + BAR_HEIGHT
+N_OBSTACLES = 10
+FPS = 10
 
 RESOURCES_PATH = "src/game/resources/"
 
 class SnakeEnv(gym.Env):
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 10}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": FPS}
 
     def __init__(self, render_mode=None, max_step=100, observation_type="grid", difficulty=0, **kwargs):
+        """
+        Snake Environment
+
+        render_mode (str) : "human" (via Pygame), "rgb_array" (headless)
+        observation_type (str) : "grid", "image"
+        difficulty (int) :  
+            0 means that the snake does not grow
+            1 means the standard game
+            2 means that there are some obstacles
+            3 means that the obstacle can change positions and there are fake apples
+        """
         assert GRID_HEIGHT >= 10
         assert GRID_WIDTH >= 10
         self.action_space = spaces.Discrete(4)  # 0=UP, 1=DOWN, 2=LEFT, 3=RIGHT
         self.render_mode = render_mode
         self.observation_type = observation_type
         self.difficulty = max(0, min(difficulty, 3)) # Clamp difficulty between 0 and 3
+        # Difficulty 0 means that the snake does not grow
+        # Difficulty 1 means the standard game
+        # Difficulty 2 means that there are some obstacles
+        # Difficulty 3 means that the obstacle can change positions and there are fake apples
         
         if self.observation_type == "image":
             self.observation_space = spaces.Box(
@@ -41,20 +58,9 @@ class SnakeEnv(gym.Env):
             )
         else:
             self.observation_space = spaces.Box(
-                low=0, high=3, shape=(GRID_HEIGHT, GRID_WIDTH), dtype=np.uint8
+                low=0, high=4, shape=(GRID_HEIGHT, GRID_WIDTH), dtype=np.uint8
             )
             
-        self.window = None
-        self.canvas = None  
-        self.clock = None
-        self.font = None
-        self.total_step = 0
-        self.score = 0         
-        self.max_step = max_step
-        
-        self.sprites_loaded = False
-        self.reset()
-        
         if kwargs == {}:
             self.reward_food = 20
             self.reward_death = -5
@@ -64,17 +70,32 @@ class SnakeEnv(gym.Env):
             self.reward_death = kwargs["reward_death"]
             self.reward_step = kwargs["reward_step"]
 
-    def _load_and_scale_sprites(self):
+        self.max_step = max_step
+
+        self.reset()        
+
+    def _load_and_scale_sprites(self, update = False):
         """Loads assets and resizes them to match your environment's CELL_SIZE."""
         def load_sp(path):
             img = pygame.image.load(path).convert_alpha()
             return pygame.transform.scale(img, (CELL_SIZE, CELL_SIZE))
         
         self.sprites = {}
+        colors = ["red", "green", "yellow"]
+        components = ["head", "body", "tail", "ul", "ur", "dl", "dr", "apple"]
         
-        for color in ["red", "green", "yellow"]:
-            for piece in ["head", "body", "tail", "ul", "ur", "dl", "dr", "apple"]:
-                self.sprites[f"{color}_{piece}"] = load_sp(f"{RESOURCES_PATH}{color}/{piece}.png")
+        for color in colors:
+            for comp in components:
+                self.sprites[f"{color}_{comp}"] = load_sp(f"{RESOURCES_PATH}{color}/{comp}.png")
+
+        # Obstacles
+        obstacles = ["bomb", "rock", "skull"]
+        if self.difficulty > 2:
+            obstacles.append("purple_apple")
+            obstacles.append("violet_apple")
+
+        for i, obs in enumerate(obstacles):
+            self.sprites[f"obstacle_{i}"] = load_sp(f"{RESOURCES_PATH}obstacles/{obs}.png")
 
         grass_categories = ["neutral", "flower", "white"]
 
@@ -84,31 +105,21 @@ class SnakeEnv(gym.Env):
                 self.sprites[f"{piece}_{i}"] = load_sp(f"{RESOURCES_PATH}grass/{piece}_{i}.png")
                 i += 1
 
-        self.grass_background = pygame.Surface((WIDTH, GAME_HEIGHT))
-
-        neutral_tiles = [k for k in self.sprites.keys() if "neutral" in k]
-        flower_tiles = [k for k in self.sprites.keys() if "flower" in k]
-        white_tiles = [k for k in self.sprites.keys() if "white" in k]
-
-        weights = [6, 3, 1]
-
-        for row in range(GRID_HEIGHT):
-            for col in range(GRID_WIDTH):
-                chosen_category = random.choices(grass_categories, weights=weights, k=1)[0]
-                
-                if chosen_category == "neutral":
-                    tile = random.choice(neutral_tiles)
-                elif chosen_category == "flower":
-                    tile = random.choice(flower_tiles)
-                else:
-                    tile = random.choice(white_tiles)
-                
-                self.grass_background.blit(self.sprites[tile], (col * CELL_SIZE, row * CELL_SIZE))
-
+        self._blit_background(update = update)
         self.sprites_loaded = True
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+
+        self.window = None
+        self.canvas = None  
+        self.clock = None
+        self.font = None
+        self.total_step = 0
+        self.score = 0         
+        
+        self.sprites_loaded = False
+
         self.snake = [(random.randrange(2, GRID_WIDTH - 2), random.randrange(2, GRID_HEIGHT-2))]
         start_x = self.snake[0][0]
         start_y = self.snake[0][1]
@@ -123,7 +134,12 @@ class SnakeEnv(gym.Env):
         self.current_snake_color = self._random_color()
         self.current_apple_type = self._random_apple()
         
+        self.obstacles = []
+
         self._place_food()
+        if self.difficulty > 1:
+            self._place_obstacles(update = False)
+
         self.done = False
         self.score = 0
         self.total_step = 0
@@ -139,8 +155,80 @@ class SnakeEnv(gym.Env):
     def _place_food(self):
         while True:
             self.food = (random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1))
-            if self.food not in self.snake:
+            if self.food not in self.snake and self.food not in self.obstacles:
                 break
+
+    def _place_obstacles(self, update = False):
+        if not update:
+            while len(self.obstacles) < N_OBSTACLES:
+                obs = (random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1))
+                if self.food != obs and obs not in self.snake and obs not in self.obstacles:
+                    self.obstacles.append(obs)
+        else:
+            self.obstacles.pop()
+            while True:
+                obs = (random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1))
+                if self.food != obs and obs not in self.snake and obs not in self.obstacles:
+                    self.obstacles.append(obs)
+                    self._blit_background(update=True)
+                    break
+
+    def _blit_background(self, update = False):
+        # Grass
+        grass_categories = ["neutral", "flower", "white"]
+        obstacles_tiles = [k for k in self.sprites.keys() if "obstacle" in k]
+
+        if not update:
+            self.grass_background = pygame.Surface((WIDTH, GAME_HEIGHT))
+            self.grass_tiles = [['' for j in range (GRID_WIDTH)] for i in range (GRID_HEIGHT)]
+
+            neutral_tiles = [k for k in self.sprites.keys() if "neutral" in k]
+            flower_tiles = [k for k in self.sprites.keys() if "flower" in k]
+            white_tiles = [k for k in self.sprites.keys() if "white" in k]
+
+            weights = [2, 6, 2]
+
+            for row in range(GRID_HEIGHT):
+                for col in range(GRID_WIDTH):
+                    chosen_category = random.choices(grass_categories, weights=weights, k=1)[0]
+                    
+                    if chosen_category == "neutral":
+                        tile = random.choice(neutral_tiles)
+                    elif chosen_category == "flower":
+                        tile = random.choice(flower_tiles)
+                    else:
+                        tile = random.choice(white_tiles)
+                    
+                    self.grass_tiles[row][col] = tile
+                    self.grass_background.blit(self.sprites[tile], (col * CELL_SIZE, row * CELL_SIZE))
+
+            # Obastacles
+            if self.difficulty > 1:
+                self.obstacles_tiles = []
+                for obstacle in self.obstacles:
+                    x, y = obstacle
+                    tile = random.choice(obstacles_tiles)
+                    self.obstacles_tiles.append(tile)
+                    self.grass_background.blit(self.sprites[tile], (x * CELL_SIZE, y * CELL_SIZE) )
+
+        else:
+            # Grass
+            for row in range(GRID_HEIGHT):
+                for col in range(GRID_WIDTH):                    
+                    tile = self.grass_tiles[row][col]
+                    self.grass_background.blit(self.sprites[tile], (col * CELL_SIZE, row * CELL_SIZE))
+
+            if self.difficulty > 1:
+                # New Obstacle Tile
+                self.obstacles_tiles.pop()
+                tile = random.choice(obstacles_tiles)
+                self.obstacles_tiles.append(tile)
+
+                for i, obstacle in enumerate(self.obstacles):
+                    x, y = obstacle
+                    tile = self.obstacles_tiles[i]
+                    self.grass_background.blit(self.sprites[tile], (x * CELL_SIZE, y * CELL_SIZE) )
+
 
     def _get_obs(self):
         if self.observation_type == "image":
@@ -153,6 +241,9 @@ class SnakeEnv(gym.Env):
         grid[head_y, head_x] = 2 
         food_x, food_y = self.food
         grid[food_y, food_x] = 1 
+        if self.difficulty > 1:
+            for x, y in self.obstacles:
+                grid[y, x] = 4
         return grid
 
     def get_possible_actions(self, action):
@@ -187,7 +278,8 @@ class SnakeEnv(gym.Env):
         if (
             new_head in self.snake or
             not (0 <= new_head[0] < GRID_WIDTH) or
-            not (0 <= new_head[1] < GRID_HEIGHT)
+            not (0 <= new_head[1] < GRID_HEIGHT) or
+            new_head in self.obstacles
         ):
             self.done = True
             reward = self.reward_death
@@ -201,6 +293,10 @@ class SnakeEnv(gym.Env):
             self.current_snake_color = self.current_apple_type.split("_")[0]
             self.current_apple_type = self._random_apple()
             self._place_food()
+            if self.difficulty>2:
+                self._place_obstacles(update = True)
+            if self.difficulty == 0: # it does not increse the size
+                self.snake.pop()
         else:
             self.snake.pop()
             reward = self.reward_step
@@ -243,7 +339,7 @@ class SnakeEnv(gym.Env):
                     self.canvas = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT))
 
         if not self.sprites_loaded:
-            self._load_and_scale_sprites()
+            self._load_and_scale_sprites(update = False)
 
         paint_surface = self.window if self.render_mode == "human" else self.canvas
         
@@ -263,7 +359,7 @@ class SnakeEnv(gym.Env):
         paint_surface.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, text_y))
         paint_surface.blit(time_text, (WIDTH - time_text.get_width() - 20, text_y))
 
-        # Grass
+        # Grass + Obstacles
         paint_surface.blit(self.grass_background, (0, BAR_HEIGHT))
 
         # Food
@@ -314,7 +410,8 @@ class SnakeEnv(gym.Env):
                         paint_surface.blit(self.sprites[f"{self.current_snake_color}_ul"], screen_pos)
 
         img_array = pygame.surfarray.array3d(paint_surface)
-        return np.transpose(img_array, (1, 0, 2))
+
+        return np.transpose(img_array.copy(), (1, 0, 2)) # openCV format
 
     def render(self):
         frame = self._render_frame()
@@ -340,12 +437,31 @@ class SnakeEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    # Usage with human interface and difficulty set to 2
+
+    difficulty = 3
+    registration = False
+    obs_mode = "image"
+
+    if registration:
+        import cv2
+
+        video = cv2.VideoWriter(
+        f"video/game_difficulty_{difficulty}.mp4",
+        cv2.VideoWriter_fourcc(*"mp4v"),
+        FPS,
+        (WIDTH, TOTAL_HEIGHT)
+        )
+
+    # Usage with human interface and difficulty set to 3
     env = SnakeEnv(render_mode="human",
-                   observation_type="grid",
-                   difficulty=2,
+                   observation_type=obs_mode,
+                   difficulty=difficulty,
                    max_step=500)
     obs, info = env.reset()
+
+    if registration:
+        frame = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
+        video.write(frame)
 
     done = False
     trunc = False
@@ -359,6 +475,14 @@ if __name__ == "__main__":
                 elif event.key == pygame.K_d: current_action = 3
         
         obs, rew, done, trunc, info = env.step(current_action)
+
+        if registration:
+            frame = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
+            video.write(frame)
+
         if not env.render():
             break
     env.close()
+
+    if registration:
+        video.release()
