@@ -4,11 +4,14 @@ environment:
   difficulty : 2
   observation_type : "grid"
   n_actions : 4
+  reward_food: 20
+  reward_death: -5
+  reward_step: -0.5
 
 policy:
   network : "AttentionDQN"
   horizon : 1
-  discount : 0.995
+  reward_discount : 0.995
   epsilon_strategy : "EpsilonGreedy"
   epsilon_start : 1.0
   epsilon_end : 0.
@@ -20,7 +23,7 @@ network:
   num_attention_layer : 2
   attention_layer_params : [{"num_heads" : 4}, {"num_heads" : 8}]
   num_fc_layer : 2
-  dim_fc_layer : [16. 32]
+  dim_fc_layer : [16, 32]
 
 training:
   device : "cpu"

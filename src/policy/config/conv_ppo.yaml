@@ -4,12 +4,15 @@ environment:
   difficulty : 2
   observation_type : "grid"
   n_actions : 4
+  reward_food: 20
+  reward_death: -5
+  reward_step: -0.5
 
 policy:
   network : "ConvPPO"
-  horizon : 1
-  discount : 0.995
-  epsilon_strategy : "EpsilonGreedy"
+  horizon : 256
+  reward_discount : 0.995
+  epsilon_strategy : "EpsilonConstant"
   epsilon_start : 1.0
   epsilon_end : 0.
   epsilon_coeff : 0.99
@@ -28,17 +31,17 @@ network:
       "kernel_size" : 3,
       "stride" : 1
     }]
-  num_fc_layer : 2
-  dim_fc_layer : [16. 32]
+  num_fc_layer : 3
+  dim_fc_layer : [3168, 128, 32]
 
 training:
   device : "cpu"
   optimizer : "Adam"
-  lr_init : 0.05
+  lr_init : 0.001
   lr_scheduler : "StepLR"
   lr_step_size : 10
   lr_gamma : 0.05
-  loss : "MSELoss"
+  loss : "PPOLoss"
   n_epochs : 5
   n_episodes : 1000
 

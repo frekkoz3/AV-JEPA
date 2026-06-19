@@ -4,6 +4,9 @@ environment:
   difficulty : 2
   observation_type : "grid"
   n_actions : 4
+  reward_food : 20
+  reward_death :  -5
+  reward_step : -0.5
 
 policy:
   network : "DQN"
@@ -12,13 +15,13 @@ policy:
   epsilon_strategy : "EpsilonGreedy"
   epsilon_start : 1.0
   epsilon_end : 0.
-  epsilon_coeff : 0.99
+  epsilon_coeff : 0.999
 
 network:
   input_dim : 400
   output_dim : 4
-  num_hidden_layers : 2
-  dim_hidden_layers : [16, 32]
+  num_hidden_layer : 2
+  dim_hidden_layer : [16, 32]
 
 training:
   device : "cpu"
@@ -29,7 +32,7 @@ training:
   lr_gamma : 0.05
   loss : "MSELoss"
   n_epochs: 5
-  n_episodes: 1000
+  n_episodes: 100
 
 pretrain:
   # network_model_path : "PUT-HERE-SOME-PATH.PT"
