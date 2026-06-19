@@ -12,18 +12,10 @@ The file implements a class Policy that takes care of
 - applying epsilon-greedy scheduling
 - more
 """
-import os
-import sys
 import yaml
-import datetime
-
-import numpy as np
-import matplotlib.pyplot as plt
+import argparse
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import tqdm
 
 from src.policy.algorithms import *
 from src.game.snake import *
@@ -35,7 +27,7 @@ class EpsilonGreedy:
 
     def __init__(self,
                  epsilon_start : float | int = 1.,
-                 coeff : float | int = 0.999,
+                 epsilon_coeff : float | int = 0.999,
                  epsilon_end : float | int = 0.,
                  **kwargs):
         """
@@ -45,14 +37,14 @@ class EpsilonGreedy:
         ----------
         epsilon_start : float | int, optional
             Initial value of epsilon (the exploration rate), by default 1.0
-        coeff : float | int, optional
+        epsilon_coeff : float | int, optional
             Decay coefficient for epsilon, by default 0.999
         epsilon_end : float | int, optional
             Minimum value of epsilon, by default 0.0
             When reached epsilon will stop decaying and will remain constant at this value.
         """
         self.eps = epsilon_start
-        self.coeff = coeff
+        self.coeff = epsilon_coeff
         self.limit = epsilon_end
 
 
@@ -75,7 +67,7 @@ class Policy:
                  epsilon_strategy : str = "EpsilonGreedy",
                  optimizer : str = "Adam",
                  loss : str = "MSELoss",
-                 n_iters : int = 1,
+                 n_epochs : int = 1,
                  device : str = "cpu",
                  horizon : int = 1,
                  reward_discount : float | int = 0.99,
@@ -105,7 +97,7 @@ class Policy:
         self.optimizer = None
         self.scheduler = None
         self.loss = None
-        self.n_iterations = n_iters
+        self.n_epochs = n_epochs
         self.device = device
 
         # Set architecture
@@ -150,21 +142,18 @@ class Policy:
 
         # Assertions
         assert network in maps, f"Network '{network}' is not supported. Supported networks are: {list(maps.keys())}."
+
+        assert "input_dim" in kwargs and "output_dim" in kwargs, \
+            f"The network requires 'input_dim' and 'output_dim' parameters."
         if network == "DQN":
-            assert "input_dim" in kwargs and "output_dim" in kwargs, \
-                f"DQN requires 'input_dim' and 'output_dim' parameters."
             assert "num_hidden_layer" in kwargs and "dim_hidden_layer" in kwargs, \
                 f"DQN requires 'num_hidden_layer' and 'dim_hidden_layer' parameters."
         elif network == "ConvDQN" or network == "ConvPPO":
-            assert "input_dim" in kwargs and "output_dim" in kwargs, \
-                f"ConvDQN requires 'input_dim' and 'output_dim' parameters."
             assert "num_conv_layer" in kwargs and "conv_layer_params" in kwargs, \
                 f"ConvDQN requires 'num_conv_layer' and 'conv_layer_params' parameters."
             assert "num_fc_layer" in kwargs and "dim_fc_layer" in kwargs, \
                 f"ConvDQN requires 'num_fc_layer' and 'dim_fc_layer' parameters."
         elif network == "AttentionDQN" or network == "AttentionPPO":
-            assert "input_dim" in kwargs and "output_dim" in kwargs, \
-                f"AttentionDQN requires 'input_dim' and 'output_dim' parameters."
             assert "num_attention_layer" in kwargs and "attention_layer_params" in kwargs, \
                 f"AttentionDQN requires 'num_attention_layer' and 'attention_layer_params' parameters."
             assert "num_fc_layer" in kwargs and "dim_fc_layer" in kwargs, \
@@ -178,7 +167,7 @@ class Policy:
         maps = {
             "EpsilonGreedy": EpsilonGreedy,
             "EpsilonConstant": lambda x,**kwargs: EpsilonGreedy(epsilon_start = kwargs.get("epsilon_start", 1.0),
-                                                              coeff = 1.0,
+                                                              epsilon_coeff= 1.0,
                                                               epsilon_end = kwargs.get("epsilon_end", 0.0))
         }
 
@@ -320,7 +309,7 @@ class Policy:
 
     def train(self, batch_or_state):
         """
-        Unified training entry point.
+        Training entry point.
         - If DQN: Expects a batch tuple (states, actions, rewards, next_states, dones).
         - If PPO/A2C: Expects a single starting state to begin on-policy rollout.
         """
@@ -331,6 +320,7 @@ class Policy:
             return self._train_on_policy(start_state=batch_or_state)
         else:
             return self._train_off_policy(batch=batch_or_state)
+
 
     def _train_off_policy(self, batch):
         """DQN Optimization via Bellman Equation and Replay Buffer."""
@@ -422,7 +412,7 @@ class Policy:
             returns[t] = gae + values[t]
 
         # 3. Optimization Epochs
-        epochs = self.n_iterations if isinstance(self.loss, PPOLoss) else 1 # PPO reuses data; A2C strictly steps once
+        epochs = self.n_epochs if isinstance(self.loss, PPOLoss) else 1 # PPO reuses data; A2C strictly steps once
         total_loss_history = []
 
         for _ in range(epochs):
@@ -446,80 +436,65 @@ class Policy:
         return {"loss": np.mean(total_loss_history), "mean_reward": rewards.mean().item()}
 
 
+def main(config_path, train_flag):
+
+    with open(config_path, 'r') as f:
+        nested_config = yaml.safe_load(f)
+
+    # Flatten the nested dictionary manually
+    config = {}
+    for section, params in nested_config.items():
+        if isinstance(params, dict):
+            for key, value in params.items():
+                config[key] = value
+        else:
+            config[section] = params
+
+
+
+    # Initialize Policy
+    policy = Policy(**config)
+
+    # Example usage: Reset environment and get initial state
+    initial_state, _ = policy.environment.reset()
+    action, _ = policy.get_action(initial_state)
+    print(f"Initial action selected: {action}")
+
+    if train_flag:
+        for episode in range(config.get("n_episodes", 100)):
+            state = policy.environment.reset()[0]
+            done = False
+
+            # Policy Training Loop
+            if isinstance(policy.network, (ConvPPO, AttentionPPO)):
+                policy.train(state)
+            else:
+                # For DQN, we would typically sample a batch from a replay buffer here.
+                buffer = []
+                while not done:
+                    action, _ = policy.get_action(state)
+                    next_state, reward, done, truncated, _ = policy.environment.step(action)
+                    buffer.append((state, action, reward, next_state, done or truncated))
+                    state = next_state
+
+                # Convert buffer to batch tensors
+                states, actions, rewards, next_states, dones = zip(*buffer)
+                states = torch.tensor(states, dtype=torch.float32, device=policy.device)
+                actions = torch.tensor(actions, dtype=torch.int64, device=policy.device)
+                rewards = torch.tensor(rewards, dtype=torch.float32, device=policy.device)
+                next_states = torch.tensor(next_states, dtype=torch.float32, device=policy.device)
+                dones = torch.tensor(dones, dtype=torch.float32, device=policy.device)
+                batch = (states, actions, rewards, next_states, dones)
+
+                policy.train(batch)
+
+
+
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Policy Training Modules")
+    parser.add_argument("--config", type=str, required=True, help="Path to the YAML configuration file.")
+    parser.add_argument("--train", action="store_true", help="Flag to indicate training mode.")
+    args = parser.parse_args()
 
-    input_dim = 16
-    output_dim = 4
-
-    # --- DQN SETUP ---
-    # network = "DQN"
-    # num_hidden_layer = 2
-    # dim_hidden_layer = [64, 64]
-
-    # --- ConvDQN SETUP ---
-    # network = "ConvDQN"
-    # num_conv_layer = 2
-    # conv_layer_params = [
-    #     {"out_channels": 8, "kernel_size": 3, "stride": 1},
-    #     {"out_channels": 16, "kernel_size": 3, "stride": 1}
-    # ]
-    # num_fc_layer = 2
-    # dim_fc_layer = [192, 32]
-
-    # --- AttentionDQN SETUP ---
-    network = "AttentionDQN"
-    num_attention_layer = 2
-    attention_layer_params = [
-        {"num_heads": 2, "dim_feedforward": 32},
-        {"num_heads": 4, "dim_feedforward": 64}
-    ]
-    num_fc_layer = 2
-    dim_fc_layer = [16, 32]
-
-    epsilon_strategy = "EpsilonGreedy"
-    epsilon_start = 1.0
-    coeff = 0.99
-    epsilon_end = 0.01
-
-    # --- DQN Policy
-    # policy = Policy(network=network,
-    #                 epsilon_strategy=epsilon_strategy,
-    #                 input_dim=input_dim,
-    #                 output_dim=output_dim,
-    #                 num_hidden_layer=num_hidden_layer,
-    #                 dim_hidden_layer=dim_hidden_layer,
-    #                 epsilon_start=epsilon_start,
-    #                 coeff=coeff,
-    #                 epsilon_end=epsilon_end)
-
-    # --- ConvDQN Policy
-    # policy = Policy(network=network,
-    #                 epsilon_strategy=epsilon_strategy,
-    #                 input_dim=input_dim,
-    #                 output_dim=output_dim,
-    #                 num_conv_layer=num_conv_layer,
-    #                 conv_layer_params=conv_layer_params,
-    #                 num_fc_layer=num_fc_layer,
-    #                 dim_fc_layer=dim_fc_layer,
-    #                 epsilon_start=epsilon_start,
-    #                 coeff=coeff,
-    #                 epsilon_end=epsilon_end)
-
-    # --- AttentionDQN Policy
-    policy = Policy(network=network,
-                    epsilon_strategy=epsilon_strategy,
-                    input_dim=input_dim,
-                    output_dim=output_dim,
-                    num_attention_layer=num_attention_layer,
-                    attention_layer_params=attention_layer_params,
-                    num_fc_layer=num_fc_layer,
-                    dim_fc_layer=dim_fc_layer,
-                    epsilon_start=epsilon_start,
-                    coeff=coeff,
-                    epsilon_end=epsilon_end)
-
-    state = torch.randn(1, 1, input_dim)  # Example state
-    q_values = policy.train(state)
-    action = policy.get_action(state, greedy = True)
-    print(f"Q-values: {q_values}, Selected action: {action}")
+    main(config_path=args.config, train_flag=args.train)
