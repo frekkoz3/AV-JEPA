@@ -335,6 +335,10 @@ $$
 - Give a glance to DeepMind Control Suite, especially for the Maze environment. They are standard in RL tasks.
 
 
+- DQN methods are off-policy methods. For our purposes, a better choice is to use on-policy methods.
+    In particular, we can use PPO (Proximal Policy Optimization) or A2C (Advantage Actor-Critic). \
+    The main difference is that PPO exploits a clipped surrogate objective to prevent large policy updates, while A2C uses a baseline to reduce variance in the policy gradient estimate.
+
 
 ---
 
