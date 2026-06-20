@@ -478,8 +478,6 @@ def main(config_path, train_flag):
         else:
             config[section] = params
 
-
-
     # Initialize Policy
     policy = Policy(**config)
 
