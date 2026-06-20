@@ -3,7 +3,7 @@
 # ==============================================================================
 # SLURM RESOURCE ALLOCATION (SBATCH Directives)
 # ==============================================================================
-#SBATCH --job-name=E2E_Policy
+#SBATCH --job-name=E2ECOnv
 #SBATCH --output=log/conv_%j.log
 #SBATCH --partition=GPU
 #SBATCH --nodes=1
