@@ -21,6 +21,28 @@ class A2CLoss:
         self.actor_coef = actor_coef
         self.critic_coef = critic_coef
 
+    @torch.no_grad()
+    def compute_advantages(self, last_state_value, rewards, values, dones):
+        """
+        Compute Advantages and normalize them.
+        """
+        horizon = rewards.shape[0]
+        returns = torch.zeros_like(rewards)
+        advantages = torch.zeros_like(rewards)
+        gae = 0.0
+
+        for t in reversed(range(horizon)):
+            next_non_terminal = 1.0 - dones[t]
+            next_value = last_state_value if t == horizon-1 else values[t+1]
+
+            delta = rewards[t] + self.discount * next_value * next_non_terminal - values[t]
+            gae = self. gae_coeff * self.discount * next_non_terminal * gae + delta
+
+            advantages[t] = gae
+            returns[t] = gae + values[t]
+
+        return returns, advantages
+
 
     def compute(self,
                 dist,
@@ -47,25 +69,6 @@ class A2CLoss:
 
         return total_loss
 
-    @torch.no_grad()
-    def compute_advantages(self, last_state_value, rewards, values, dones):
-        """
-        Compute Advantages and normalize them.
-        """
-        horizon = rewards.shape[0]
-        returns = torch.zeros_like(rewards)
-        advantage = torch.zeros_like(rewards)
-
-        for t in reversed(range(horizon)):
-            next_non_terminal = 1.0 - dones[t]
-            next_value = last_state_value if t == horizon-1 else values[t+1]
-
-            delta = rewards[t] + self.discount * next_value * next_non_terminal - values[t]
-            advantage = self. gae_coeff * self.discount * next_non_terminal * advantage + delta
-            returns[t] = advantage + values[t]
-
-        return returns, advantage
-
 
 class PPOLoss:
     """Common PPO Loss"""
@@ -75,7 +78,7 @@ class PPOLoss:
                  critic_coeff : float | int  = 0.5,
                  gae_coeff : float | int = 0.95,
                  clip_ratio : float | int = 0.2,
-                 discount : float | int = 0.99
+                 discount : float | int = 0.99,
                  **kwargs):
         self.actor_coeff = actor_coeff
         self.critic_coeff = critic_coeff
@@ -90,20 +93,23 @@ class PPOLoss:
         """
         horizon = rewards.shape[0]
         returns = torch.zeros_like(rewards)
-        advantage = torch.zeros_like(rewards)
+        advantages = torch.zeros_like(rewards)
+        gae = 0.0
 
         for t in reversed(range(horizon)):
             next_non_terminal = 1.0 - dones[t]
             next_value = last_state_value if t == horizon-1 else values[t+1]
 
             delta = rewards[t] + self.discount * next_value * next_non_terminal - values[t]
-            advantage = self. gae_coeff * self.discount * next_non_terminal * advantage + delta
-            returns[t] = advantage + values[t]
+            gae = self. gae_coeff * self.discount * next_non_terminal * gae + delta
+
+            advantages[t] = gae
+            returns[t] = gae + values[t]
 
         # normalize advantage
-        advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-8)
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        return returns, advantage
+        return returns, advantages
 
 
     def compute(self,
@@ -111,15 +117,11 @@ class PPOLoss:
                 values,
                 actions,
                 returns,
+                advantages,
                 old_log_probs,
                 **kwargs):
         """Compute the PPO loss given the distribution, values, returns, and old log probabilities."""
         values = values.squeeze(-1)
-
-        # 2. Compute Advantage and Normalize it
-        advantages = returns - values.detach()
-        if advantages.shape[0] > 1:
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         # 3. Calculate Policy Ratio
         new_log_probs = dist.log_prob(actions)

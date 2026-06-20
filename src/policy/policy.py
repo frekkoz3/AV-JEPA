@@ -320,17 +320,38 @@ class Policy:
     @torch.no_grad()
     def _get_rollout(self, state):
         """Runs a rollout in the environment, given an initial state"""
-        states = torch.empty((0, *state.shape), dtype=torch.float32, device=self.device)
-        actions = torch.empty((0,), dtype=torch.int64, device=self.device)
-        rewards = torch.empty((0,), dtype=torch.float32, device=self.device)
-        values = torch.empty((0,), dtype=torch.float32, device=self.device)
-        dones = torch.empty((0,), dtype=torch.float32, device=self.device)
-        log_probs = torch.empty((0,), dtype=torch.float32, device=self.device)
+        states, actions, rewards, values, log_probs, dones = [], [], [], [], [], []
 
+        # Deal with batch dimensions
+        # Final shape: [batch_size, channel, pixels]
+        state = torch.tensor(state, dtype=torch.float32, device=self.device)
+        if state.shape == (20, 20):
+            state = state.flatten()
+        if state.dim() == 1:
+            state = state.unsqueeze(0)
+        if state.dim() == 2: # Require a batch dimension
+            state = state.unsqueeze(1)
+
+        # Rollout loop
         for step in range(self.horizon):
 
-            # Deal with batch dimensions
-            # Final shape: [batch_size, channel, pixels]
+            distribution, value = self.network(state)
+            action = distribution.sample()
+            log_prob = distribution.log_prob(action)
+            next_state, reward, done, truncated, _ = self.environment.step(action.item())
+            stop = done or truncated
+
+            states.append(state)
+            actions.append(action)
+            rewards.append(torch.tensor([reward], dtype=torch.float32, device=self.device))
+            values.append(value.squeeze(-1))
+            dones.append(torch.tensor([stop], dtype=torch.float32, device=self.device))
+            log_probs.append(log_prob)
+
+            state = next_state
+            if stop:
+                state, _ = self.environment.reset()
+
             state = torch.tensor(state, dtype=torch.float32, device=self.device)
             if state.shape == (20, 20):
                 state = state.flatten()
@@ -339,29 +360,18 @@ class Policy:
             if state.dim() == 2: # Require a batch dimension
                 state = state.unsqueeze(1)
 
-            # Rollout
-            distribution, value = self.network(state)
-            action = distribution.sample()
-            log_prob = distribution.log_prob(action)
-            next_state, reward, done, truncated, _ = self.environment.step(action.item())
-            reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
-            stop = done or truncated
-            stop_t = torch.tensor([stop], dtype=torch.float32, device=self.device)
 
-            states = torch.cat((states, state), dim=0)
-            actions = torch.cat((actions, action), dim=0)
-            rewards = torch.cat((rewards, reward), dim=0)
-            values = torch.cat((values, value.squeeze(-1)), dim=0)
-            dones = torch.cat((dones, stop_t), dim=0)
-            log_probs = torch.cat((log_probs, log_prob), dim=0)
 
-            state = next_state
-            if stop:
-                state, _ = self.environment.reset()
+        states = torch.cat(states, dim=0)
+        actions = torch.cat(actions, dim=0)
+        rewards = torch.cat(rewards, dim=0)
+        values = torch.cat(values, dim=0)
+        dones = torch.cat(dones, dim=0)
+        log_probs = torch.cat(log_probs, dim=0)
 
-        # last state value for GAE:
-        _, last_value = self.network(states[-1])
-        values = torch.cat((values, last_value.squeeze(-1).unsqueeze(0)), dim=0)
+        # Value of final state for GAE bootstrapping
+        _, last_value = self.network(state)
+        values = torch.cat((values, last_value.squeeze(-1)), dim=0)
 
         return states, actions, rewards, values, log_probs, dones
 
@@ -376,7 +386,7 @@ class Policy:
 
         self.network.train()
         if is_policy_based:
-            return self._train_on_policy(start_state=batch_or_state)
+            return self._train_on_policy(init_state=batch_or_state)
         else:
             return self._train_off_policy(batch=batch_or_state)
 
@@ -432,7 +442,7 @@ class Policy:
         states, actions, rewards, values, log_probs, dones = self._get_rollout(state = init_state)
 
         # Compute advantages and returns
-        returns, advantage = self.loss.compute_advantages(last_state_value = values[-1],
+        returns, advantages = self.loss.compute_advantages(last_state_value = values[-1],
                                                           rewards = rewards,
                                                           values = values,
                                                           dones = dones)
@@ -444,13 +454,15 @@ class Policy:
         total_loss_history = []
 
         for _ in range(epochs):
-            dist, new_values = self.network(states)
+            distribution, new_values = self.network(states)
 
             # Branch based on loss function signature
-            if isinstance(self.loss, PPOLoss):
-                loss = self.loss.compute(dist, new_values, actions, returns, log_probs.detach())
-            else:
-                loss = self.loss.compute(dist, new_values, actions, returns)
+            loss = self.loss.compute(dist = distribution,
+                                     values = new_values,
+                                     actions = actions,
+                                     returns = returns,
+                                     advantages = advantages,
+                                     old_log_probs = log_probs.detach())
 
             self.optimizer.zero_grad()
             loss.backward()
