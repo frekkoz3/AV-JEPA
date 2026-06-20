@@ -329,15 +329,12 @@ class Policy:
 
         state_buffer = deque(maxlen=4)
 
-        # Deal with batch dimensions
-        # Final shape: [batch_size, channel, pixels]
+        # 1. Format initial state to strictly [1, 400]
         state = torch.tensor(state, dtype=torch.float32, device=self.device)
         if state.shape == (20, 20):
             state = state.flatten()
         if state.dim() == 1:
             state = state.unsqueeze(0)
-        if state.dim() == 2: # Require a batch dimension
-            state = state.unsqueeze(1)
 
         for _ in range(4):
             state_buffer.append(state)
@@ -345,37 +342,47 @@ class Policy:
         # Rollout loop
         for step in range(self.horizon):
 
-            state = torch.stack(list(state_buffer), dim=1) if isinstance(self.network, AttentionPPO) else state_buffer[-1].unsqueeze(1)
-            distribution, value = self.network(state)
+            # 2. Format tensor for the network (Use a NEW variable: state_tensor)
+            if isinstance(self.network, (AttentionPPO, AttentionDQN)):
+                state_tensor = torch.stack(list(state_buffer), dim=1) # Shape: [1, 4, 400]
+            elif isinstance(self.network, (ConvPPO, ConvDQN)):
+                state_tensor = state_buffer[-1].unsqueeze(1)          # Shape: [1, 1, 400]
+            else:
+                state_tensor = state_buffer[-1]                       # Shape: [1, 400]
+
+            # 3. Network Pass using state_tensor
+            distribution, value = self.network(state_tensor)
             action = distribution.sample()
             log_prob = distribution.log_prob(action)
+
             next_state, reward, done, truncated, _ = self.environment.step(action.item())
             stop = done or truncated
 
-            states.append(state)
+            states.append(state_tensor)
             actions.append(action)
             rewards.append(torch.tensor([reward], dtype=torch.float32, device=self.device))
             values.append(value.squeeze(-1))
             dones.append(torch.tensor([stop], dtype=torch.float32, device=self.device))
             log_probs.append(log_prob)
 
+            # 4. Handle State Transition
             state = next_state
             if stop:
                 state, _ = self.environment.reset()
 
+            # Format the next state EXACTLY like the initial state
             state = torch.tensor(state, dtype=torch.float32, device=self.device)
             if state.shape == (20, 20):
                 state = state.flatten()
             if state.dim() == 1:
                 state = state.unsqueeze(0)
-            if state.dim() == 2: # Require a batch dimension
-                state = state.unsqueeze(1)
 
+            # 5. Update Temporal Memory safely
             if stop:
                 for _ in range(4):
                     state_buffer.append(state)
-
-
+            else:
+                state_buffer.append(state)
 
         states = torch.cat(states, dim=0)
         actions = torch.cat(actions, dim=0)
@@ -385,8 +392,14 @@ class Policy:
         log_probs = torch.cat(log_probs, dim=0)
 
         # Value of final state for GAE bootstrapping
-        state = torch.stack(list(state_buffer), dim=1) if isinstance(self.network, AttentionPPO) else state_buffer[-1].unsqueeze(1)
-        _, last_value = self.network(state)
+        if isinstance(self.network, (AttentionPPO, AttentionDQN)):
+            last_state_tensor = torch.stack(list(state_buffer), dim=1)
+        elif isinstance(self.network, (ConvPPO, ConvDQN)):
+            last_state_tensor = state_buffer[-1].unsqueeze(1)
+        else:
+            last_state_tensor = state_buffer[-1]
+
+        _, last_value = self.network(last_state_tensor)
         values = torch.cat((values, last_value.squeeze(-1)), dim=0)
 
         return states, actions, rewards, values, log_probs, dones
@@ -499,8 +512,7 @@ class Policy:
                 nn.utils.clip_grad_norm_(self.network.parameters(), max_norm=0.5)
                 self.optimizer.step()
                 total_loss_history.append(loss.item())
-
-            distribution, new_values = self.network(states)
+                self.scheduler.step()
 
         if self.scheduler:
             self.scheduler.step() # Note: Step scheduler per rollout, not per environment frame
