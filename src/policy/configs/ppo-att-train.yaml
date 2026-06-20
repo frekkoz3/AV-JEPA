@@ -45,10 +45,10 @@ training:
   lr_gamma : 0.05
   loss : "PPOLoss"
   n_epochs: 5
-  n_episodes: 1000
+  n_episodes: 10000
 
 save:
-  checkpoint : 50
+  checkpoint : 100
   save_model : True
   save_path : "./src/policy/models/attention-ppo/"
 
