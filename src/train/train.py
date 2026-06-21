@@ -5,7 +5,7 @@ r"""
  | |___ / __/| |__|_____| |_| | |___|  __/ ___ \ 
  |_____|_____|_____|     \___/|_____|_| /_/   \_\
 """
-from src.jepa.jepa import VisionTransformer, ActionConditionedPredictor
+from src.jepa.transformers import VisualTransformer, Transformer
 from src.policy.policy import PolicyNetwork
 from src.game.snake import SnakeEnv
 from src.jepa.e2e_jepa import *
@@ -19,8 +19,8 @@ REFRESH_BUFFER = 8
 if __name__ == '__main__':
     
     trainer = ActiveE2EJEPATrainer(
-        encoder=VisionTransformer(),
-        predictor=ActionConditionedPredictor(),
+        encoder=VisualTransformer(),
+        predictor=Transformer(),
         policy_network=PolicyNetwork(),
         action_dim=ACTION_DIM
     )
