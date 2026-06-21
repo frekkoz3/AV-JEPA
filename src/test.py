@@ -10,32 +10,20 @@ model = VisualTransformer(
     depth=6
 )
 
-x = torch.randn(2, 3, 224, 224)
+device = "cuda"
 
-y = model(x)
+model.to(device=device)
 
-print(y.shape)
-
-with torch.no_grad():
-    patches = model.patch_embed(x)
-
-    cls_before = model.cls_token.expand(x.size(0), -1, -1)
-
-    tokens = torch.cat((cls_before, patches), dim=1)
-    tokens = model.pos_embed(tokens)
-
-    out = model.transformer(tokens)
-
-    cls_after = out[:, 0]
-
-print(torch.norm(cls_after - cls_before.squeeze(1)))
+x = torch.randn(2, 3, 224, 224).to(device = device)
 
 num_classes = 5
 
 head = nn.Linear(768, num_classes)
 
-images = torch.randn(10, 3, 224, 224)
-labels = torch.randint(0, num_classes, (10,))
+head.to(device=device)
+
+images = torch.randn(10, 3, 224, 224).to(device=device)
+labels = torch.randint(0, num_classes, (10,)).to(device=device)
 
 optimizer = torch.optim.Adam(
     list(model.parameters()) + list(head.parameters()),
