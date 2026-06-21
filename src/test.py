@@ -10,14 +10,20 @@ model = VisualTransformer(
     depth=6
 )
 
-x = torch.randn(2, 3, 224, 224)
+device = "cuda"
+
+model.to(device=device)
+
+x = torch.randn(2, 3, 224, 224).to(device = device)
 
 num_classes = 5
 
 head = nn.Linear(768, num_classes)
 
-images = torch.randn(10, 3, 224, 224)
-labels = torch.randint(0, num_classes, (10,))
+head.to(device=device)
+
+images = torch.randn(10, 3, 224, 224).to(device=device)
+labels = torch.randint(0, num_classes, (10,)).to(device=device)
 
 optimizer = torch.optim.Adam(
     list(model.parameters()) + list(head.parameters()),
