@@ -1,17 +1,18 @@
 env:
   environment : "Snake"
+  n_environments : 16
   render_mode : "human"
   difficulty : 2
   observation_type : "grid"
   n_actions : 4
-  reward_food: 1000
-  reward_death: -200
+  reward_food: 10
+  reward_death: -2
   reward_step: 0.0
 
 policy:
   network : "AttentionPPO"
-  horizon : 64
-  reward_discount : 0.995
+  horizon : 256
+  discount : 0.995
   epsilon_strategy : "EpsilonConstant"
   epsilon_start : 1.0
   epsilon_end : 0.

@@ -73,7 +73,7 @@ class PlayEnv:
         done = False
         trunc = False
         while not done and not trunc:
-            action, _ = self.policy.get_action(obs)
+            action, _ = self.policy.get_action(obs, greedy =True)
             obs, rew, done, trunc, info = self.env.step(action)
 
             if self.record:

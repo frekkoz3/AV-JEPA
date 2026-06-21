@@ -54,4 +54,4 @@ save:
   save_path : "./src/policy/models/attention-ppo/"
 
 pretrain:
-  model_path : "./src/policy/models/attention-ppo/ep_4401-10000.pth"
+  model_path : "./src/policy/models/attention-ppo/ep_1101-10000.pth"

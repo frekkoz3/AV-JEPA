@@ -20,6 +20,8 @@ import argparse
 import numpy as np
 import torch
 
+import gymnasium as gym
+
 from src.policy.algorithms import *
 from src.game.snake import *
 from src.policy.losses import *
@@ -133,7 +135,9 @@ class Policy:
         assert "difficulty" in kwargs, f"Environment requires 'difficulty' parameter."
         assert "observation_type" in kwargs, f"Environment requires 'observation_type' parameter."
 
-        self.environment = maps[environment](**kwargs)
+        num_envs = kwargs.get("n_environments", 1)
+
+        self.environment = gym.vector.SyncVectorEnv([lambda: maps[environment](**kwargs) for _ in range(num_envs)]) if num_envs > 1 else maps[environment](**kwargs)
 
 
     def _set_network(self, network : str, **kwargs):
@@ -233,15 +237,15 @@ class Policy:
         """Formats the state from the environment to match the expected input shape of the network."""
         state_tensor = state if isinstance(state, torch.Tensor) else torch.tensor(state, dtype=torch.float32, device=self.device)
 
-        # 1. Flatten the 2D grid from the environment (20, 20) -> (400)
-        if state_tensor.shape == (20, 20):
-            state_tensor = state_tensor.flatten()
+        # 1. Batched 2D grids: (num_envs, 20, 20) -> (num_envs, 400)
+        if state_tensor.dim() == 3 and state_tensor.shape[1:] == (20, 20):
+            state_tensor = state_tensor.view(state_tensor.shape[0], -1)
 
-        # 2. Add Batch dimension (400) -> (1, 400)
-        if state_tensor.dim() == 1:
-            state_tensor = state_tensor.unsqueeze(0)
+        # 2. Flatten the 2D grid from the environment (20, 20) -> (1, 400)
+        elif state_tensor.shape == (20, 20):
+            state_tensor = state_tensor.flatten().unsqueeze(0)
 
-        # 3. Add Channel dimension specifically for Convolutional and Attention Networks -> (1, 1, 400)
+        # 3. Add a Channel dimension specifically for Convolutional and Attention Networks -> (1, 1, 400)
         if not isinstance(self.network, DQN) and state_tensor.dim() == 2:
             state_tensor = state_tensor.unsqueeze(1)
 
@@ -272,7 +276,7 @@ class Policy:
                     action = torch.argmax(dist.logits, dim=-1)
                 else:
                     action = dist.sample()
-            return action.item(), (dist.log_prob(action), value.squeeze(-1))
+            return action.cpu().numpy(), (dist.log_prob(action), value.squeeze(-1))
 
         # --- DQN (Off-Policy) ---
         else:
@@ -316,30 +320,28 @@ class Policy:
             action, (log_p, value) = self.get_action(state, greedy = False)
 
             next_state, reward, done, truncated, _ = self.environment.step(action)
-            stop = done or truncated
+            stop = done | truncated
 
             states.append(state)
-            actions.append(torch.tensor([action], dtype=torch.int64, device=self.device))
-            rewards.append(torch.tensor([reward], dtype=torch.float32, device=self.device))
-            values.append(value.squeeze(-1))
-            dones.append(torch.tensor([stop], dtype=torch.float32, device=self.device))
+            actions.append(torch.tensor(action, dtype=torch.int64, device=self.device))
+            rewards.append(torch.tensor(reward, dtype=torch.float32, device=self.device))
+            values.append(value)
+            dones.append(torch.tensor(stop, dtype=torch.float32, device=self.device))
             log_probs.append(log_p)
 
             # 4. Handle State Transition
             state = next_state
-            if stop:
-                state, _ = self.environment.reset()
 
-        states = torch.cat(states, dim=0)
-        actions = torch.cat(actions, dim=0)
-        rewards = torch.cat(rewards, dim=0)
-        values = torch.cat(values, dim=0)
-        dones = torch.cat(dones, dim=0)
-        log_probs = torch.cat(log_probs, dim=0)
+        states = torch.stack(states, dim=0)
+        actions = torch.stack(actions, dim=0)
+        rewards = torch.stack(rewards, dim=0)
+        values = torch.stack(values, dim=0)
+        dones = torch.stack(dones, dim=0)
+        log_probs = torch.stack(log_probs, dim=0)
 
         last_state = self._format_state(state)
         _, last_value = self.network(last_state)
-        last_value = last_value.squeeze(-1).squeeze(-1)
+        last_value = last_value.squeeze(-1).squeeze(-1).unsqueeze(0)
         values = torch.cat( [values, last_value], dim=0)
 
         return states, actions, rewards, values, log_probs, dones
@@ -430,6 +432,13 @@ class Policy:
                                                           values = values,
                                                           dones = dones)
 
+        batch_size = states.shape[0] * states.shape[1]
+
+        states = states.view(batch_size, *states.shape[2:])
+        actions = actions.view(batch_size)
+        old_log_probs = log_probs.view(batch_size).detach()
+        mini_batch_size = self.mini_batch_size
+
         # 3. Optimization Epochs
         # PPO: # epochs = self.n_epochs
         # A2C: # epochs = 1
@@ -437,25 +446,42 @@ class Policy:
         loss_history = []
         distribution_history = []
 
+        self.network.train()
         for _ in range(epochs):
 
-            distribution, new_values = self.network(states)
+            indices = torch.randperm(batch_size, device=self.device)
 
-            # Branch based on loss function signature
-            loss = self.loss.compute(dist = distribution,
-                                     values = new_values,
-                                     actions = actions,
-                                     returns = returns,
-                                     advantages = advantages,
-                                     old_log_probs = log_probs.detach())
+            # Iterate over the batch in chunks of mini_batch_size
+            for start in range(0, batch_size, mini_batch_size):
+                end = start + mini_batch_size
+                mb_indices = indices[start:end]
 
-            self.optimizer.zero_grad()
-            loss.backward()
+                # Slice mini-batch data
+                mb_states = states[mb_indices]
+                mb_actions = actions[mb_indices]
+                mb_returns = returns[mb_indices]
+                mb_advantages = advantages[mb_indices]
+                mb_old_log_probs = old_log_probs[mb_indices]
 
-            nn.utils.clip_grad_norm_(self.network.parameters(), max_norm=0.5)
-            self.optimizer.step()
-            loss_history.append(loss.item())
-            distribution_history.append(distribution.probs.mean(dim=0).cpu().detach().numpy())
+                # Forward pass on mini-batch
+                distribution, new_values = self.network(mb_states)
+
+                # Compute PPO loss
+                loss = self.loss.compute(dist = distribution,
+                                         values = new_values,
+                                         actions = mb_actions,
+                                         returns = mb_returns,
+                                         advantages = mb_advantages,
+                                         old_log_probs = mb_old_log_probs)
+
+                # Backpropagation
+                self.optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(self.network.parameters(), max_norm=0.5)
+                self.optimizer.step()
+
+                loss_history.append(loss.item())
+                distribution_history.append(distribution.probs.mean(dim=0).cpu().detach().numpy())
 
         if self.scheduler:
             self.scheduler.step() # Note: Step scheduler per rollout, not per environment frame
@@ -490,8 +516,12 @@ def main(config_path, train_flag):
             info = policy.train(state)
 
             if episode % 10 == 0:
-                print(f"Episode {episode + 1}/{n_episodes} \t\t Loss: {info['loss']:.4f}, "
+                if isinstance(policy.network, (ConvPPO, AttentionPPO)):
+                    print(f"Episode {episode + 1}/{n_episodes} \t\t Loss: {info['loss']:.4f}, "
                       f"Mean Reward: {info['mean_reward']:.4f}, Distribution: {info['last_distribution']}")
+                else:
+                    print(f"Episode {episode + 1}/{n_episodes} \t\t Loss: {info['loss']:.4f}, "
+                      f"Mean Value: {info['mean_value']:.4f}, Epsilon: {policy.epsilon_strategy.eps:.4f}")
             if save_model and episode % checkpoint == 0:
                 policy.save_network(path=f"{folder_path}ep_{episode+1}-{n_episodes}.pth")
 

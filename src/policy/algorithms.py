@@ -406,6 +406,8 @@ class AttentionPPO(nn.Module):
         """
         state = self.attention_layers(state)
 
+        state = state.mean(dim=1)
+
         state = self.fc_layers(state)
 
         logits = self.actor_head(state)

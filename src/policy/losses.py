@@ -92,20 +92,26 @@ class PPOLoss:
         Compute Advantages and normalize them.
         """
         horizon = rewards.shape[0]
+        num_envs = rewards.shape[1] if len(rewards.shape) > 1 else 1
         returns = torch.zeros_like(rewards)
         advantages = torch.zeros_like(rewards)
-        gae = 0.0
+        gae = torch.zeros(num_envs, device=rewards.device) if num_envs > 1 else 0.0
 
         for t in reversed(range(horizon)):
             next_non_terminal = 1.0 - dones[t]
             next_value = last_state_value if t == horizon-1 else values[t+1]
 
             delta = rewards[t] + self.discount * next_value * next_non_terminal - values[t]
-            gae = self. gae_coeff * self.discount * next_non_terminal * gae + delta
+            gae = self.gae_coeff * self.discount * next_non_terminal * gae + delta
 
             advantages[t] = gae
             returns[t] = gae + values[t]
 
+
+        # flatten tensors if they are 2D (horizon, num_envs) to 1D (horizon * num_envs)
+        if len(advantages.shape) > 1:
+            advantages = advantages.view(-1)
+            returns = returns.view(-1)
         # normalize advantage
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
