@@ -9,9 +9,9 @@ def modulate(x, shift, scale):
 class MultiHeadAttention(nn.Module):
     """Multi-head self-attention module"""
 
-    def __init__(self, dim, heads, dim_head, dropout):
+    def __init__(self, dim, num_heads, dropout):
         super().__init__()
-        self.attn = nn.MultiheadAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout)
+        self.attn = nn.MultiheadAttention(dim, num_heads=num_heads, dropout=dropout, batch_first=True)
 
     def forward(self, x):
         return self.attn(x, x, x)[0]
@@ -41,12 +41,12 @@ class PositionalEncoding(nn.Module):
 class TransformerEncoderBlock(nn.Module):
     """Transformer block with AdaLN-zero conditioning"""
 
-    def __init__(self, dim, heads, dim_head, mlp_dim, dropout=0.0, adaLN_modulation=False):
+    def __init__(self, dim, num_heads, mlp_dim, dropout=0.0, adaLN_modulation=False):
         super().__init__()
 
         self.do_adaLN_modulation = adaLN_modulation
 
-        self.attn = MultiHeadAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout)
+        self.attn = MultiHeadAttention(dim, num_heads=num_heads, dropout=dropout)
         self.mlp = nn.Sequential(
             nn.LayerNorm(dim),
             nn.Linear(dim, mlp_dim),
@@ -94,8 +94,7 @@ class Transformer(nn.Module):
         hidden_dim,
         output_dim,
         depth,
-        heads,
-        dim_head,
+        num_heads,
         mlp_dim,
         dropout=0.0,
         use_adaLN=False,
@@ -103,7 +102,6 @@ class Transformer(nn.Module):
         super().__init__()
         self.norm = nn.LayerNorm(hidden_dim)
         
-
         if input_dim != hidden_dim:
             self.input_proj = nn.Linear(input_dim, hidden_dim)
             self.cond_proj = nn.Linear(input_dim, hidden_dim)
@@ -112,7 +110,7 @@ class Transformer(nn.Module):
             self.output_proj = nn.Linear(hidden_dim, output_dim)
 
         self.layers = nn.ModuleList([
-            TransformerEncoderBlock(hidden_dim, heads, dim_head, mlp_dim, dropout, use_adaLN)
+            TransformerEncoderBlock(hidden_dim, num_heads, mlp_dim, dropout, use_adaLN)
             for _ in range(depth)])
 
     def forward(self, x, c=None):
@@ -138,7 +136,7 @@ class VisualTransformer(nn.Module):
         super().__init__()
         self.patch_embed = PatchEmbedding(in_channels=3, embed_dim=embed_dim, patch_size=patch_size)
         self.pos_embed = PositionalEncoding(embed_dim=embed_dim, seq_len=(img_size//patch_size)**2)
-        self.transformer = Transformer(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=embed_dim, depth=depth, heads=num_heads, dim_head=embed_dim//num_heads, mlp_dim=mlp_dim)
+        self.transformer = Transformer(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=embed_dim, depth=depth, num_heads=num_heads, mlp_dim=mlp_dim)
         self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
 
 
