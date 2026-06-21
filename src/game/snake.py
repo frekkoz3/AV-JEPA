@@ -502,8 +502,8 @@ if __name__ == "__main__":
             frame = cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)
             video.write(frame)
 
-        if not env.render():
-            break
+        if render_mode == "human":
+            env.render()
 
     env.close()
 
