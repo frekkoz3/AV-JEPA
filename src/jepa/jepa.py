@@ -20,7 +20,6 @@ DEFAULT_VIT_PATCH_SIZE = 16
 # Predictor parameters
 DEFAULT_PREDICTOR_DEPTH = 4
 DEFAULT_PREDICTOR_HEADS = 8
-DEFAULT_PREDICTOR_DIM_HEAD = 64
 
 # SIGReg parameters
 DEFAULT_SIGREG_KNOTS = 17
@@ -103,7 +102,6 @@ class JEPA(nn.Module):
 		vit_heads: int = DEFAULT_VIT_HEADS,
 		predictor_depth: int = DEFAULT_PREDICTOR_DEPTH,
 		predictor_heads: int = DEFAULT_PREDICTOR_HEADS,
-		predictor_dim_head: int = DEFAULT_PREDICTOR_DIM_HEAD,
 		sigreg: SIGReg | None = None,
 	):
 		super().__init__()
@@ -123,7 +121,7 @@ class JEPA(nn.Module):
 		self.action_encoder = action_encoder or ActionEncoder(num_actions=num_actions, embed_dim=action_embed_dim)
 		
 		self.predictor = predictor or transformers.Transformer(
-			input_dim=latent_dim, hidden_dim=latent_dim, output_dim=latent_dim, depth=predictor_depth, heads=predictor_heads, dim_head=predictor_dim_head, mlp_dim=mlp_dim)
+			input_dim=latent_dim, hidden_dim=latent_dim, output_dim=latent_dim, depth=predictor_depth, num_heads=predictor_heads, mlp_dim=mlp_dim)
 		
 		self.actor = actor or Actor(latent_dim=latent_dim, num_actions=num_actions)
 		
