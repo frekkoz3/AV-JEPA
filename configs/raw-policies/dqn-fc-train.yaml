@@ -6,7 +6,7 @@ environment:
   observation_type : "grid"
   n_actions : 4
   max_step : 1000
-  reward_food : 20
+  reward_food : 2000
   reward_death :  -10
   reward_step : -0.1
 

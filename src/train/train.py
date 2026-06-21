@@ -5,10 +5,13 @@ r"""
  | |___ / __/| |__|_____| |_| | |___|  __/ ___ \ 
  |_____|_____|_____|     \___/|_____|_| /_/   \_\
 """
+import argparse
+
 from src.jepa.jepa import VisionTransformer, ActionConditionedPredictor
-from src.policy.policy import Policy
+from src.policy.policy import Policy, PolicyDQN, PolicyPPO
 from src.game.snake import SnakeEnv
 from src.jepa.e2e_jepa import *
+from src.utils.utils import *
 
 TOTAL_EPOCHS = 20000
 STEPS_PER_EPOCH = 256
@@ -17,11 +20,18 @@ ACTION_DIM = 4
 REFRESH_BUFFER = 8
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Active E2E-JEPA Training for Snake Game')
+    parser.add_argument("--config", type=str, default="configs/train_config.yaml", help="Path to the training configuration file")
+    args = parser.parse_args()
+
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
+    config = flat_config(config)
     
     trainer = ActiveE2EJEPATrainer(
         encoder=VisionTransformer(),
         predictor=ActionConditionedPredictor(),
-        policy=Policy(),
+        policy=Policy(**config),
         action_dim=ACTION_DIM
     )
     
