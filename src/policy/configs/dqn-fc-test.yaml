@@ -43,4 +43,4 @@ save:
   save_path: "./src/policy/models/fc-dqn/"
 
 pretrain:
- network_model_path : "./src/policy/models/fc-dqn/ep_1000-5000.pth"
+ network_model_path : "./src/policy/models/fc-dqn/_final.pth"

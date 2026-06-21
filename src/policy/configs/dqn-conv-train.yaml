@@ -38,14 +38,14 @@ policy-loss:
   loss : "MSELoss"
 
 training:
-  device : "cuda"
+  device : "cpu"
   optimizer : "Adam"
   lr_init : 0.05
   lr_scheduler : "ExponentialLR"
   lr_step_size : 10
   lr_gamma : 0.999
   n_epochs: 5
-  n_episodes: 10000
+  n_trajectories: 10000
 
 save:
   checkpoint: 1000
