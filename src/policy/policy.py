@@ -12,75 +12,22 @@ The file implements a class Policy that takes care of
 - applying epsilon-greedy scheduling
 - more
 """
-from collections import deque
-import copy
-
+from typing import Dict, Any, Tuple
 import yaml
 import argparse
-
+import copy
+import random
 import numpy as np
 import torch
-
+from collections import deque
 import gymnasium as gym
 
 from src.policy.algorithms import *
-from src.game.snake import *
+from src.policy.epsilon import *
 from src.policy.losses import *
+
+from src.game.snake import *
 from src.utils.utils import *
-
-
-
-class EpsilonGreedy:
-    """Epsilon-greedy policy"""
-
-    def __init__(self,
-                 epsilon_start : float | int = 1.,
-                 epsilon_coeff : float | int = 0.999,
-                 epsilon_end : float | int = 0.,
-                 **kwargs):
-        """
-        Applies epsilon-greedy scheduling to balance exploration and exploitation during training.
-
-        Parameters
-        ----------
-        epsilon_start : float | int, optional
-            Initial value of epsilon (the exploration rate), by default 1.0
-        epsilon_coeff : float | int, optional
-            Decay coefficient for epsilon, by default 0.999
-        epsilon_end : float | int, optional
-            Minimum value of epsilon, by default 0.0
-            When reached epsilon will stop decaying and will remain constant at this value.
-        """
-        self.eps = epsilon_start
-        self.coeff = epsilon_coeff
-        self.limit = epsilon_end
-
-
-    def step(self):
-        """Updates the value of epsilon according to the decay coefficient and the minimum limit."""
-        if self.eps > self.limit:
-            self.eps *= self.coeff
-        else:
-            self.eps = self.limit
-        return self.eps
-
-
-
-class EpsilonConstant(EpsilonGreedy):
-    """Constant epsilon-greedy policy"""
-
-    def __init__(self, **kwargs):
-        """
-        Initializes a constant epsilon-greedy policy.
-
-        Parameters
-        ----------
-        **kwargs:
-            Additional keyword arguments (not used in this class).
-        """
-        super().__init__(epsilon_start=kwargs.get("epsilon_start", 1.0),
-                         epsilon_coeff=1.0,
-                         epsilon_end=kwargs.get("epsilon_end", 0.0))
 
 
 
@@ -88,14 +35,12 @@ class Policy:
     """Policy class that combines a network architecture and an epsilon-greedy strategy for action selection."""
 
     def __init__(self,
-                 environment : str = "Snake",
+                 environment : str | None = "Snake",
                  network : str = "DQN",
                  epsilon_strategy : str = "EpsilonGreedy",
                  optimizer : str = "Adam",
                  loss : str = "MSELoss",
-                 n_epochs : int = 1,
                  device : str = "cpu",
-                 horizon : int = 1,
                  reward_discount : float | int = 0.99,
                  **kwargs):
         """
@@ -116,19 +61,17 @@ class Policy:
         # Policy attributes
         self.network = None
         self.epsilon_strategy = None
-        self.horizon = horizon
-        self.mini_batch_size = kwargs.get("mini_batch_size", 8)
         self.reward_discount = reward_discount
 
         # Training attributes
         self.optimizer = None
         self.scheduler = None
         self.loss = None
-        self.n_epochs = n_epochs
         self.device = device
 
         # Set architecture
-        self._set_environment(environment, **kwargs)
+        if environment:
+            self._set_environment(environment, **kwargs)
         self._set_network(network, **kwargs)
         if kwargs.get("model_path"):
             self.load_network(path = str(kwargs.get("model_path")))
@@ -138,18 +81,10 @@ class Policy:
         self._set_optimizer(optimizer, **kwargs)
         self._set_loss(loss, **kwargs)
 
-        self.q_values = None
-
-        if isinstance(self.network, (DQN, AttentionDQN, ConvDQN)):
-            self.replay_buffer = deque(maxlen=50000)
-            self.batch_size = kwargs.get("mini_batch_size", 64)
-            self.target_network = copy.deepcopy(self.network)
-            self.target_net_update_freq = kwargs.get("target_update_freq", 25)
-            self.update_count = 0
-
 
     def _set_environment(self, environment : str, **kwargs):
         """Sets the environment for the policy."""
+        print(f"I entered here")
         maps = {
             "Snake": SnakeEnv,
         }
@@ -257,23 +192,19 @@ class Policy:
         self.loss = maps[loss](**kwargs)
 
 
+    def save_network(self, path : str):
+        """Saves the model parameters to the specified path."""
+        torch.save(self.network.state_dict(), path)
+
+
+    def load_network(self, path : str):
+        """Loads the model parameters from the specified path."""
+        self.network.load_state_dict(torch.load(path, map_location=self.device))
+
+
     def _format_state(self, state):
         """Formats the state from the environment to match the expected input shape of the network."""
-        state_tensor = state if isinstance(state, torch.Tensor) else torch.tensor(state, dtype=torch.float32, device=self.device)
-
-        # 1. Batched 2D grids: (num_envs, 20, 20) -> (num_envs, 400)
-        if state_tensor.dim() == 3 and state_tensor.shape[1:] == (20, 20) and isinstance(self.network, (ConvPPO, AttentionPPO)):
-            state_tensor = state_tensor.view(state_tensor.shape[0], -1)
-
-        # 2. Flatten the 2D grid from the environment (20, 20) -> (1, 400)
-        elif state_tensor.shape == (20, 20):
-            state_tensor = state_tensor.flatten().unsqueeze(0)
-
-        # 3. Add a Channel dimension specifically for Convolutional and Attention Networks -> (1, 1, 400)
-        if not isinstance(self.network, DQN) and state_tensor.dim() == 2:
-            state_tensor = state_tensor.unsqueeze(1)
-
-        return state_tensor
+        pass
 
 
     def get_action(self, state, greedy : bool = False):
@@ -288,53 +219,58 @@ class Policy:
             If True, selects the action with the highest Q-value (exploitation).
             If False, applies epsilon-greedy strategy to select an action.
         """
-        state = self._format_state(state)
-
-        is_on_policy = isinstance(self.network, (ConvPPO, AttentionPPO))
-
-        # --- PPO / A2C (On-Policy) ---
-        if is_on_policy:
-            with torch.no_grad():
-                dist, value = self.network(state)
-                if greedy:
-                    action = torch.argmax(dist.logits, dim=-1)
-                else:
-                    action = dist.sample()
-            return action.cpu().numpy(), (dist.log_prob(action), value.squeeze(-1))
-
-        # --- DQN (Off-Policy) ---
-        else:
-            if not greedy and np.random.rand() < self.epsilon_strategy.eps:
-                action = np.random.randint(0, self.network.output.out_features)
-            else:
-                with torch.no_grad():
-                    q_values = self.network(state)
-                    action = torch.argmax(q_values, dim=-1).item()
-            return action, (None, None)
+        pass
 
 
-    def save_network(self, path : str):
-        """Saves the model parameters to the specified path."""
-        torch.save(self.network.state_dict(), path)
-
-
-    def load_network(self, path : str):
-        """Loads the model parameters from the specified path."""
-        self.network.load_state_dict(torch.load(path, map_location=self.device))
-
-
-    def forward(self, state):
+    def train(self, state, n_trajectories):
         """
-        TODO: Consider to remove this method if not needed
-        Simply applies the forward() method of the network.
+        Training entry point.
+        - If DQN: Expects a batch tuple (states, actions, rewards, next_states, dones).
+        - If PPO/A2C: Expects a single starting state to begin on-policy rollout.
         """
-        self.q_values = self.network(state)
-        return self.q_values
+        pass
+
+
+    def trainer(self, **kwargs):
+        """Manages a training session"""
+        assert self.environment is not None, "Environment must be set for training"
+
+        n_trajectories = kwargs.get("n_trajectories", 100)
+        save_model = kwargs.get("save_model", False)
+        checkpoint = kwargs.get("checkpoint", 10)
+        folder_path = kwargs.get("save_path", f"./src/policy/models/")
+
+        for trajectory in range(n_trajectories):
+            state = self.environment.reset()[0]
+
+            self.train(state, n_trajectories = n_trajectories)
+            if save_model and trajectory % checkpoint == 0:
+                self.save_network(path=f"{folder_path}ep_{trajectory+1}-{n_trajectories}.pth")
+
+        if save_model:
+            self.save_network(path=f"{folder_path}final.pth")
+
+
+
+class PolicyPPO(Policy):
+    """Subclass for PPO-based policies"""
+
+    def __init__(self,  **kwargs):
+
+        assert kwargs.get("network", "ConvPPO") in ["ConvPPO", "AttentionPPO"], f"Invalid network type: {kwargs.get('network')}. Must be 'ConvPPO' or 'AttentionPPO'."
+        assert kwargs.get("loss", "PPOLoss") in ["PPOLoss", "A2CLoss"], f"Invalid loss type: {kwargs.get('loss')}. Must be 'PPOLoss' or 'A2CLoss'."
+        assert kwargs.get("epsilon_strategy", "EpsilonConstant") == "EpsilonConstant", f"Invalid epsilon strategy: {kwargs.get('epsilon_strategy')}. Must be 'EpsilonConstant' for PolicyPPO."
+
+        super().__init__(**kwargs)
+
+        self.n_inner_epochs = kwargs.get("n_inner_epochs", 4)
+        self.mini_batch_size = kwargs.get("mini_batch_size", 8)
+        self.horizon = kwargs.get("horizon", 1)
 
 
     @torch.no_grad()
     def _get_rollout(self, state):
-        """Runs a rollout in the environment, given an initial state"""
+        """"Runs a rollout in the environment, given an initial state"""
         states, actions, rewards, values, log_probs, dones = [], [], [], [], [], []
 
         # Rollout loop
@@ -365,12 +301,189 @@ class Policy:
 
         last_state = self._format_state(state)
         _, last_value = self.network(last_state)
-        last_value = last_value.squeeze(-1).squeeze(-1).unsqueeze(0)
+        if isinstance(self.environment, gym.vector.VectorEnv):
+            last_value = last_value.squeeze(-1).squeeze(-1).unsqueeze(0)
+        else:
+            last_value = last_value.squeeze(-1).unsqueeze(0)
         values = torch.cat( [values, last_value], dim=0)
 
         return states, actions, rewards, values, log_probs, dones
 
 
+    def _format_state(self, state : Any) -> torch.Tensor:
+        """
+        Formats the input state into a suitable format for the PPO network:
+                [batch_size, n_channels, raw_pixels] = [1, 1, 400]
+        """
+        state_tensor = state if isinstance(state, torch.Tensor) else torch.tensor(state, dtype=torch.float32, device=self.device)
+
+        # (num_envs, 20, 20) -> (num_envs, 1, 400)
+        if state_tensor.dim() == 3 and state_tensor.shape[1:] == (20, 20):
+            state_tensor = state_tensor.view(state_tensor.shape[0], 1, 400)
+
+        # (20, 20) -> (1, 1, 400)
+        elif state_tensor.shape == (20, 20):
+            state_tensor = state_tensor.flatten().unsqueeze(0).unsqueeze(0)
+
+
+        return state_tensor
+
+    @torch.no_grad()
+    def get_action(self,
+                   state : torch.Tensor | Tuple[torch.Tensor, ...],
+                   greedy = False) -> Tuple[torch.Tensor | Any, tuple[Any, Any]]:
+        """Selects an action based on the current state using a policy derived from the PPO algorithm."""
+        dist, value = self.network(state)
+
+        if greedy:
+            action_tensor = torch.argmax(dist.logits, dim=-1)
+        else:
+            action_tensor = dist.sample()
+
+        log_p = dist.log_prob(action_tensor)
+        if isinstance(self.environment, gym.vector.VectorEnv):
+            action_out = action_tensor.cpu().numpy()
+        else:
+            action_out = action_tensor.item()
+
+        return action_out, (log_p, value.squeeze(-1))
+
+
+    def train(self, init_state, n_trajectories : int):
+        """PPO full training loop"""
+        # Compute rollout
+        states, actions, rewards, values, log_probs, dones = self._get_rollout(state = init_state)
+
+        # Compute advantages and returns
+        returns, advantages = self.loss.compute_advantages(last_state_value = values[-1],
+                                                           rewards = rewards,
+                                                           values = values,
+                                                           dones = dones)
+
+        batch_size = states.shape[0] * states.shape[1]
+
+        states = states.view(batch_size, *states.shape[2:])
+        actions = actions.view(batch_size)
+        old_log_probs = log_probs.view(batch_size).detach()
+        mini_batch_size = self.mini_batch_size
+
+        # 3. Optimization Epochs
+        # PPO: # epochs = self.n_inner_epochs
+        # A2C: # epochs = 1
+        epochs = self.n_inner_epochs if isinstance(self.loss, PPOLoss) else 1
+        loss_history = []
+        distribution_history = []
+
+        self.network.train()
+        for epoch in range(epochs):
+
+            indices = torch.randperm(batch_size, device=self.device)
+
+            # Iterate over the batch in chunks of mini_batch_size
+            for start in range(0, batch_size, mini_batch_size):
+                end = start + mini_batch_size
+                mb_indices = indices[start:end]
+
+                # Slice mini-batch data
+                mb_states = states[mb_indices]
+                mb_actions = actions[mb_indices]
+                mb_returns = returns[mb_indices]
+                mb_advantages = advantages[mb_indices]
+                mb_old_log_probs = old_log_probs[mb_indices]
+
+                # Forward pass on mini-batch
+                distribution, new_values = self.network(mb_states)
+
+                # Compute PPO loss
+                loss = self.loss.compute(dist = distribution,
+                                         values = new_values,
+                                         actions = mb_actions,
+                                         returns = mb_returns,
+                                         advantages = mb_advantages,
+                                         old_log_probs = mb_old_log_probs)
+
+                # Backpropagation
+                self.optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(self.network.parameters(), max_norm=0.5)
+                self.optimizer.step()
+
+                loss_history.append(loss.item())
+                distribution_history.append(distribution.probs.mean(dim=0).cpu().detach().numpy())
+
+        if self.scheduler:
+            self.scheduler.step() # Note: Step scheduler per rollout, not per environment frame
+
+        info = {"loss": np.mean(loss_history), "mean_reward": rewards.mean().item(), "last_distribution": distribution_history[-1]}
+        if epoch % 10 == 0:
+            print(f"Episode {epoch + 1}/{n_trajectories} \t\t Loss: {info['loss']:.4f}, Mean Value: {info['mean_value']:.4f}, Epsilon: {self.epsilon_strategy.eps:.4f}")
+
+        return info
+
+
+    def update_parameters(self, trajectory : torch.Tensor | Tuple[torch.Tensor, ...]) -> Dict[str, float | Any]:
+        """
+        Updates the parameters of the architecture based on policy gradient optimization.
+
+        Parameters
+        ----------
+        trajectory : torch.Tensor | Tuple[torch.Tensor, ...]
+            A trajectory of states, actions, rewards, and other relevant information used for computing the policy gradient update.
+
+        Returns
+        -------
+        loss : Dict[str,  float]
+            A dictionary containing the computed losses for monitoring and analysis.
+
+        Notes
+        -----
+        The update is slower than the one for DQN, since it requires (in e2e_jepa.update_parameters() ) to compute the full trajectory of states, actions, next states, rewards, dones.
+        """
+        z_states, _, z_next_states, actions, rewards, dones, log_probs, values = trajectory
+
+        # Compute Advantages and Returns using GAE
+        returns, advantages = self.loss.compute_advantages(last_state_value = values[-1], rewards = rewards, values = values, dones = dones)
+
+        loss_history = []
+        dist_history = []
+
+        self.network.train()
+        for _ in range(self.n_inner_epochs):
+            dist, value = self.network(z_states)
+            loss = self.loss(dist = dist, values = value, actions = actions, returns = returns, advantages = advantages, old_log_probs = log_probs)
+
+            self.optimizer.zero_grad()
+            loss.backward()
+            nn.utils.clip_grad_norm_(self.network.parameters(), max_norm=0.5)
+            self.optimizer.step()
+
+            loss_history.append(loss.item())
+            dist_history.append(dist.probs.mean(dim=0).cpu().etach().numpy())
+
+        return {"loss": np.mean(loss_history), "mean_distribution": np.mean(dist_history, axis=0)}
+
+
+
+class PolicyDQN(Policy):
+    """Subclass for DQN-based policies"""
+
+    def __init__(self,**kwargs):
+
+        assert kwargs.get("network", "ConvDQN") in ["ConvDQN", "AttentionDQN", "DQN"], f"Invalid network type: {kwargs.get('network')}. Must be 'ConvDQN' or 'AttentionDQN' or 'DQN'."
+        assert kwargs.get("loss", "MSELoss") == "MSELoss", \
+            f"Invalid loss type: {kwargs.get('loss')}. Must be 'MSELoss'."
+        assert kwargs.get("epsilon_strategy", "EpsilonConstant") in ["EpsilonConstant", "EpsilonGreedy"], f"Invalid epsilon strategy: {kwargs.get('epsilon_strategy')}. Must be 'EpsilonConstant' or 'EpsilonGreedy'."
+
+        super().__init__(**kwargs)
+
+        self.target_network = copy.deepcopy(self.network)
+        self.target_net_update_freq = kwargs.get("target_update_freq", 25)
+        self.epoch = 0
+
+        self.replay_buffer = deque(maxlen=kwargs.get("replay_buffer_size", 10000))
+        self.batch_size = kwargs.get("batch_size", 64)
+
+    @torch.no_grad()
     def _get_buffer(self, state):
         """Computes a single trajectory buffer for Off-Policy DQN."""
         state = self._format_state(state)
@@ -406,28 +519,47 @@ class Policy:
 
         batch = (states, actions, rewards, next_states, dones)
 
+        episode_reward = rewards.sum().item()
+        episode_length = len(rewards)
+        score = self.environment.get_score()
+
+        print(
+            f"Reward={episode_reward:.2f}"
+            f" Score={score}"
+            f" Length={episode_length}"
+        )
+
         return batch
 
 
-    def train(self, state):
-        """
-        Training entry point.
-        - If DQN: Expects a batch tuple (states, actions, rewards, next_states, dones).
-        - If PPO/A2C: Expects a single starting state to begin on-policy rollout.
-        """
-        is_on_policy = isinstance(self.network, (AttentionPPO, ConvPPO))
+    def _format_state(self, state : Any) -> torch.Tensor:
+        """Formats the input state into a suitable format for the PPO network."""
+        state_tensor = state if isinstance(state, torch.Tensor) else torch.tensor(state, dtype=torch.float32, device=self.device)
 
-        self.network.train()
-        if is_on_policy:
-            return self._train_on_policy(init_state=state)
+        # 2. Flatten the 2D grid from the environment (20, 20) -> (1, 400)
+        if state_tensor.shape == (20, 20):
+            state_tensor = state_tensor.flatten().unsqueeze(0)
+
+        if not isinstance(self.network, DQN) and state_tensor.dim() == 2:
+            state_tensor = state_tensor.unsqueeze(1)
+
+        return state_tensor
+
+    @torch.no_grad()
+    def get_action(self,
+                   state : torch.Tensor | Tuple[torch.Tensor, ...],
+                   greedy : bool = False) -> Tuple[torch.Tensor | Any, tuple[Any, Any]]:
+        """Selects an action based on the current state using an epsilon-greedy strategy."""
+        if not greedy and np.random.rand() < self.epsilon_strategy.eps:
+            action = np.random.randint(0, self.network.output.out_features)
         else:
-            return self._train_off_policy(init_state=state)
+            q_values = self.network(state)
+            action = torch.argmax(q_values, dim=-1).item()
+        return action, (None, None)
 
 
-    def _train_off_policy(self, init_state):
-        import random
-
-        # 1. Collect the trajectory and unpack it
+    def train(self, init_state, n_trajectories):
+        """DQN full training loop"""
         states, actions, rewards, next_states, dones = self._get_buffer(init_state)
 
         # 2. Push individual transitions to the persistent replay buffer
@@ -468,120 +600,86 @@ class Policy:
             self.scheduler.step()
         self.epsilon_strategy.step()
 
-        if (self.update_count + 1) % self.target_net_update_freq == 0:
+        if (self.epoch + 1) % self.target_net_update_freq == 0:
             self.target_network.load_state_dict(self.network.state_dict())
-        self.update_count += 1
+        self.epoch += 1
 
-        return {"loss": td_loss.item(), "mean_value": current_q.mean().item()}
+        # info = {"loss": td_loss.item(), "mean_value": current_q.mean().item()}
+        with torch.no_grad():
+            q_std = current_q.std().item()
+            q_max = current_q.max().item()
+            q_min = current_q.min().item()
 
-
-    def _train_on_policy(self, init_state):
-        """PPO/A2C Optimization via Trajectory Rollout and GAE."""
-
-        # Compute rollout
-        states, actions, rewards, values, log_probs, dones = self._get_rollout(state = init_state)
-
-        # Compute advantages and returns
-        returns, advantages = self.loss.compute_advantages(last_state_value = values[-1],
-                                                          rewards = rewards,
-                                                          values = values,
-                                                          dones = dones)
-
-        batch_size = states.shape[0] * states.shape[1]
-
-        states = states.view(batch_size, *states.shape[2:])
-        actions = actions.view(batch_size)
-        old_log_probs = log_probs.view(batch_size).detach()
-        mini_batch_size = self.mini_batch_size
-
-        # 3. Optimization Epochs
-        # PPO: # epochs = self.n_epochs
-        # A2C: # epochs = 1
-        epochs = self.n_epochs if isinstance(self.loss, PPOLoss) else 1
-        loss_history = []
-        distribution_history = []
-
-        self.network.train()
-        for _ in range(epochs):
-
-            indices = torch.randperm(batch_size, device=self.device)
-
-            # Iterate over the batch in chunks of mini_batch_size
-            for start in range(0, batch_size, mini_batch_size):
-                end = start + mini_batch_size
-                mb_indices = indices[start:end]
-
-                # Slice mini-batch data
-                mb_states = states[mb_indices]
-                mb_actions = actions[mb_indices]
-                mb_returns = returns[mb_indices]
-                mb_advantages = advantages[mb_indices]
-                mb_old_log_probs = old_log_probs[mb_indices]
-
-                # Forward pass on mini-batch
-                distribution, new_values = self.network(mb_states)
-
-                # Compute PPO loss
-                loss = self.loss.compute(dist = distribution,
-                                         values = new_values,
-                                         actions = mb_actions,
-                                         returns = mb_returns,
-                                         advantages = mb_advantages,
-                                         old_log_probs = mb_old_log_probs)
-
-                # Backpropagation
-                self.optimizer.zero_grad()
-                loss.backward()
-                nn.utils.clip_grad_norm_(self.network.parameters(), max_norm=0.5)
-                self.optimizer.step()
-
-                loss_history.append(loss.item())
-                distribution_history.append(distribution.probs.mean(dim=0).cpu().detach().numpy())
-
-        if self.scheduler:
-            self.scheduler.step() # Note: Step scheduler per rollout, not per environment frame
-
-        return {"loss": np.mean(loss_history), "mean_reward": rewards.mean().item(), "last_distribution": distribution_history[-1]}
+        info = {
+            "loss": td_loss.item(),
+            "mean_value": current_q.mean().item(),
+            "q_std": q_std,
+            "q_max": q_max,
+            "q_min": q_min,
+        }
+        if self.epoch % 50 == 0:
+            print(
+                f"Episode {self.epoch + 1}/{n_trajectories}"
+                f" | Loss: {info['loss']:.4f}"
+                f" | MeanQ: {info['mean_value']:.4f}"
+                f" | StdQ: {info['q_std']:.4f}"
+                f" | MaxQ: {info['q_max']:.4f}"
+                f" | MinQ: {info['q_min']:.4f}"
+                f" | Epsilon: {self.epsilon_strategy.eps:.4f}"
+            )
+        return info
 
 
+    def update_parameters(self,
+                          init_state : torch.Tensor | Tuple[torch.Tensor, ...],
+                          next_state : torch.Tensor | Tuple[torch.Tensor],
+                          rewards : torch.Tensor,
+                          dones : torch.Tensor,
+                          ) -> Dict[str, float | int]:
+        """
+        Computes a TD learning step for the DQN architecture.
 
-def main(config_path, train_flag):
+        Parameters
+        ----------
+        init_state : torch.Tensor | Tuple[torch.Tensor, ...]
+            The initial state or a tuple of states from which to compute the DQN update.
+        next_state : torch.Tensor | Tuple[torch.Tensor]
+            The next state or a tuple of next states corresponding to the initial states.
+        rewards : torch.Tensor
+            The rewards received after taking actions in the initial states.
+        dones : torch.Tensor
+            A tensor indicating whether the episodes have terminated after taking actions in the initial states.
 
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-    config = flat_config(config)
+        Returns
+        -------
+        loss : Dict[str,  float]
+            A dictionary containing the computed losses for monitoring and analysis.
+        """
+        # Compute Q-Values for the initial state
+        q_values = self.network(init_state)
+        online_q_values = q_values.gather(1, torch.argmax(q_values, dim=-1, keepdim=True)).squeeze(-1)
 
-    # Initialize Policy
-    policy = Policy(**config)
+        # Compute Target Q-Values for the next state using the target network
+        with torch.no_grad():
+            next_q_values = self.target_network(next_state)
+            max_next_q_values, _ = torch.max(next_q_values, dim=-1)
+            target_q_values = rewards + self.reward_discount * max_next_q_values * (1 - dones)
 
-    # Reset environment and get initial state
-    initial_state, _ = policy.environment.reset()
+        # Compute the loss (MSE) between online and target Q-Values
+        loss = self.loss(online_q_values, target_q_values)
 
-    if train_flag:
-        print("Starting training...")
-        n_episodes = config.get("n_episodes", 100)
-        save_model = config.get("save_model", False)
-        checkpoint = config.get("checkpoint", 10)
-        folder_path = config.get("save_path", f"./src/policy/models/")
+        # Optimize parameters
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        self.epsilon_strategy.step()
 
-        for episode in range(n_episodes):
-            state = policy.environment.reset()[0]
-            done = False
+        # Update target network
+        self.epoch += 1
+        if self.epoch % self.target_update_freq == 0:
+            self.target_network.load_state_dict(self.network.state_dict())
 
-            info = policy.train(state)
-
-            if episode % 10 == 0:
-                if isinstance(policy.network, (ConvPPO, AttentionPPO)):
-                    print(f"Episode {episode + 1}/{n_episodes} \t\t Loss: {info['loss']:.4f}, "
-                      f"Mean Reward: {info['mean_reward']:.4f}, Distribution: {info['last_distribution']}")
-                else:
-                    print(f"Episode {episode + 1}/{n_episodes} \t\t Loss: {info['loss']:.4f}, "
-                      f"Mean Value: {info['mean_value']:.4f}, Epsilon: {policy.epsilon_strategy.eps:.4f}")
-            if save_model and episode % checkpoint == 0:
-                policy.save_network(path=f"{folder_path}ep_{episode+1}-{n_episodes}.pth")
-
-        if config.get("save_model", False):
-            policy.save_network(path=f"{folder_path}_final.pth")
+        return {"loss": loss.item()}
 
 
 
@@ -591,4 +689,21 @@ if __name__ == "__main__":
     parser.add_argument("--train", action="store_true", help="Flag to indicate training mode.")
     args = parser.parse_args()
 
-    main(config_path=args.config, train_flag=args.train)
+    config_path, train_flag = args.config, args.train
+
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    config = flat_config(config)
+
+    # Initialize Policy
+    if config.get("network") in ["AttentionPPO", "ConvPPO"]:
+        policy = PolicyPPO(**config)
+    else:
+        policy = PolicyDQN(**config)
+
+    # Reset environment and get initial state
+    initial_state, _ = policy.environment.reset()
+
+    if train_flag:
+        print("Starting training...")
+        policy.trainer(**config)
