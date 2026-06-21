@@ -12,11 +12,6 @@ import random
 from collections import deque
 from typing import Dict, Any, Tuple
 
-from game.snake import SnakeEnv
-from policy.policy import Policy
-from policy.jepa_policy import PolicyPPO, PolicyDQN
-
-
 # Experience Replay Buffer for Online Trajectories
 class OnlineTrajectoryBuffer:
     """Stores online transitions and serves randomized mini-batches 
@@ -52,10 +47,10 @@ class OnlineTrajectoryBuffer:
 class ActiveE2EJEPATrainer:
     def __init__(
         self,
-        env: SnakeEnv,
+        env,
         encoder: nn.Module,
         predictor: nn.Module,
-        policy: Policy | PolicyPPO | PolicyDQN,
+        policy,
         action_dim: int,
         latent_dim: int = 192,
         lr: float = 1e-4,
