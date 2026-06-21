@@ -20,6 +20,7 @@ policy:
 policy-network:
   input_dim : 400
   output_dim : 4
+  dim_stack : 4
   num_attention_layer : 4
   attention_layer_params : [{"num_heads" : 4},
                             {"num_heads" : 16},
@@ -53,4 +54,4 @@ save:
   save_path : "./src/policy/models/attention-ppo/"
 
 pretrain:
-  model_path : "./src/policy/models/attention-ppo/ep_9001-10000.pth"
+  model_path : "./src/policy/models/attention-ppo/ep_4401-10000.pth"
