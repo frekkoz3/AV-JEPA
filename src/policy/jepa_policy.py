@@ -6,6 +6,7 @@ from numpy import floating
 
 from src.policy.policy import *
 from src.policy.algorithms import *
+from src.policy.epsilon import *
 from src.policy.losses import *
 
 from src.game.snake import *
@@ -13,13 +14,31 @@ from src.utils.utils import *
 
 
 class PolicyPPO(Policy):
+    """Subclass for PPO-based policies"""
 
-    def __init__(self, network : nn.Module, **kwargs):
-        super().__init__(network, **kwargs)
-        self.network = network
-        self.epsilon_strategy = EpsilonConstant
-        self.loss = eval(kwargs.get("loss", "PPOLoss"))(**kwargs)
+    def __init__(self,  **kwargs):
+
+        assert kwargs.get("network", "ConvPPO") in ["ConvPPO", "AttentionPPO"], f"Invalid network type: {kwargs.get('network')}. Must be 'ConvPPO' or 'AttentionPPO'."
+        assert kwargs.get("loss", "PPOLoss") in ["PPOLoss", "A2CLoss"], f"Invalid loss type: {kwargs.get('loss')}. Must be 'PPOLoss' or 'A2CLoss'."
+        assert kwargs.get("epsilon_strategy", "EpsilonConstant") == "EpsilonConstant", f"Invalid epsilon strategy: {kwargs.get('epsilon_strategy')}. Must be 'EpsilonConstant' for PolicyPPO."
+
+        super().__init__(**kwargs)
+
         self.n_inner_epochs = kwargs.get("n_inner_epochs", 4)
+
+
+    def _format_state(self, state : Any) -> torch.Tensor:
+        """
+        Formats the input state into a suitable format for the PPO network:
+                [batch_size, n_channels, raw_pixels] = [1, 1, 400]
+        """
+        state_tensor = state if isinstance(state, torch.Tensor) else torch.tensor(state, dtype=torch.float32, device=self.device)
+
+        if state_tensor.shape == (20, 20):
+            state_tensor = state_tensor.flatten().unsqueeze(0)
+
+        return state_tensor
+
 
     @torch.no_grad()
     def get_action(self,
@@ -32,6 +51,12 @@ class PolicyPPO(Policy):
         else:
             action = dist.sample().cpu().numpy()
         return action, (dist.log_prob(torch.tensor(action)).cpu().numpy(), value.squeeze(-1))
+
+
+    def train(self):
+        """PPO full training loop"""
+        assert self.environment is not None, "Environment must be set for training"
+        pass
 
 
     def update_parameters(self, trajectory : torch.Tensor | Tuple[torch.Tensor, ...]) -> Dict[str, floating[Any] | Any]:
@@ -78,19 +103,25 @@ class PolicyPPO(Policy):
 
 
 class PolicyDQN(Policy):
+    """Subclass for DQN-based policies"""
 
+    def __init__(self,**kwargs):
 
-    def __init__(self, network : nn.Module, **kwargs):
-        super().__init__(network, **kwargs)
-        self.network = network
-        self.target_network = copy.deepcopy(network)
+        assert kwargs.get("network", "ConvDQN") in ["ConvDQN", "AttentionDQN", "DQN"], f"Invalid network type: {kwargs.get('network')}. Must be 'ConvDQN' or 'AttentionDQN' or 'DQN'."
+        assert kwargs.get("loss", "MSELoss") == "MSELoss", \
+            f"Invalid loss type: {kwargs.get('loss')}. Must be 'MSELoss'."
+        assert kwargs.get("epsilon_strategy", "EpsilonConstant") in ["EpsilonConstant", "EpsilonGreedy"], f"Invalid epsilon strategy: {kwargs.get('epsilon_strategy')}. Must be 'EpsilonConstant' or 'EpsilonGreedy'."
 
-        self.epsilon_strategy = EpsilonGreedy(**kwargs)
-        self.loss = MSELoss(**kwargs)
+        super().__init__(**kwargs)
 
-        self.reward_discount = kwargs.get("reward_discount", 0.99)
-        self.target_update_freq = kwargs.get("target_update_freq", 25)
+        self.target_network = copy.deepcopy(self.network)
+        self.target_net_update_freq = kwargs.get("target_update_freq", 25)
         self.epoch = 0
+
+        self.replay_buffer = deque(maxlen=kwargs.get("replay_buffer_size", 10000))
+        self.batch_size = kwargs.get("batch_size", 64)
+
+
 
     @torch.no_grad()
     def get_action(self,
@@ -103,6 +134,16 @@ class PolicyDQN(Policy):
             q_values = self.network(state)
             action = torch.argmax(q_values, dim=-1).cpu().numpy()
         return action, (None, None)
+
+
+    def train(self):
+        """DQN full training loop"""
+        pass
+
+
+    def _format_state(self, state : Any) -> torch.Tensor:
+            """Formats the input state into a suitable format for the PPO network."""
+        pass
 
 
     def update_parameters(self,

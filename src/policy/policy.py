@@ -24,63 +24,10 @@ import torch
 import gymnasium as gym
 
 from src.policy.algorithms import *
-from src.game.snake import *
 from src.policy.losses import *
+from src.policy.epsilon import *
+from src.game.snake import *
 from src.utils.utils import *
-
-
-
-class EpsilonGreedy:
-    """Epsilon-greedy policy"""
-
-    def __init__(self,
-                 epsilon_start : float | int = 1.,
-                 epsilon_coeff : float | int = 0.999,
-                 epsilon_end : float | int = 0.,
-                 **kwargs):
-        """
-        Applies epsilon-greedy scheduling to balance exploration and exploitation during training.
-
-        Parameters
-        ----------
-        epsilon_start : float | int, optional
-            Initial value of epsilon (the exploration rate), by default 1.0
-        epsilon_coeff : float | int, optional
-            Decay coefficient for epsilon, by default 0.999
-        epsilon_end : float | int, optional
-            Minimum value of epsilon, by default 0.0
-            When reached epsilon will stop decaying and will remain constant at this value.
-        """
-        self.eps = epsilon_start
-        self.coeff = epsilon_coeff
-        self.limit = epsilon_end
-
-
-    def step(self):
-        """Updates the value of epsilon according to the decay coefficient and the minimum limit."""
-        if self.eps > self.limit:
-            self.eps *= self.coeff
-        else:
-            self.eps = self.limit
-        return self.eps
-
-
-
-class EpsilonConstant(EpsilonGreedy):
-    """Constant epsilon-greedy policy"""
-
-    def __init__(self, **kwargs):
-        """
-        Initializes a constant epsilon-greedy policy.
-
-        Parameters
-        ----------
-        **kwargs:
-            Additional keyword arguments (not used in this class).
-        """
-        super().__init__(epsilon_start=kwargs.get("epsilon_start", 1.0),
-                         epsilon_coeff=1.0,
-                         epsilon_end=kwargs.get("epsilon_end", 0.0))
 
 
 
@@ -88,7 +35,7 @@ class Policy:
     """Policy class that combines a network architecture and an epsilon-greedy strategy for action selection."""
 
     def __init__(self,
-                 environment : str = "Snake",
+                 environment : str | None = "Snake",
                  network : str = "DQN",
                  epsilon_strategy : str = "EpsilonGreedy",
                  optimizer : str = "Adam",
@@ -128,7 +75,8 @@ class Policy:
         self.device = device
 
         # Set architecture
-        self._set_environment(environment, **kwargs)
+        if environment:
+            self._set_environment(environment, **kwargs)
         self._set_network(network, **kwargs)
         if kwargs.get("model_path"):
             self.load_network(path = str(kwargs.get("model_path")))
@@ -137,15 +85,6 @@ class Policy:
         self._set_epsilon_strategy(epsilon_strategy, **kwargs)
         self._set_optimizer(optimizer, **kwargs)
         self._set_loss(loss, **kwargs)
-
-        self.q_values = None
-
-        if isinstance(self.network, (DQN, AttentionDQN, ConvDQN)):
-            self.replay_buffer = deque(maxlen=50000)
-            self.batch_size = kwargs.get("mini_batch_size", 64)
-            self.target_network = copy.deepcopy(self.network)
-            self.target_net_update_freq = kwargs.get("target_update_freq", 25)
-            self.update_count = 0
 
 
     def _set_environment(self, environment : str, **kwargs):
@@ -259,21 +198,22 @@ class Policy:
 
     def _format_state(self, state):
         """Formats the state from the environment to match the expected input shape of the network."""
-        state_tensor = state if isinstance(state, torch.Tensor) else torch.tensor(state, dtype=torch.float32, device=self.device)
-
-        # 1. Batched 2D grids: (num_envs, 20, 20) -> (num_envs, 400)
-        if state_tensor.dim() == 3 and state_tensor.shape[1:] == (20, 20) and isinstance(self.network, (ConvPPO, AttentionPPO)):
-            state_tensor = state_tensor.view(state_tensor.shape[0], -1)
-
-        # 2. Flatten the 2D grid from the environment (20, 20) -> (1, 400)
-        elif state_tensor.shape == (20, 20):
-            state_tensor = state_tensor.flatten().unsqueeze(0)
-
-        # 3. Add a Channel dimension specifically for Convolutional and Attention Networks -> (1, 1, 400)
-        if not isinstance(self.network, DQN) and state_tensor.dim() == 2:
-            state_tensor = state_tensor.unsqueeze(1)
-
-        return state_tensor
+        # state_tensor = state if isinstance(state, torch.Tensor) else torch.tensor(state, dtype=torch.float32, device=self.device)
+        #
+        # # 1. Batched 2D grids: (num_envs, 20, 20) -> (num_envs, 400)
+        # if state_tensor.dim() == 3 and state_tensor.shape[1:] == (20, 20) and isinstance(self.network, (ConvPPO, AttentionPPO)):
+        #     state_tensor = state_tensor.view(state_tensor.shape[0], -1)
+        #
+        # # 2. Flatten the 2D grid from the environment (20, 20) -> (1, 400)
+        # elif state_tensor.shape == (20, 20):
+        #     state_tensor = state_tensor.flatten().unsqueeze(0)
+        #
+        # # 3. Add a Channel dimension specifically for Convolutional and Attention Networks -> (1, 1, 400)
+        # if not isinstance(self.network, DQN) and state_tensor.dim() == 2:
+        #     state_tensor = state_tensor.unsqueeze(1)
+        #
+        # return state_tensor
+        pass
 
 
     def get_action(self, state, greedy : bool = False):
@@ -288,29 +228,30 @@ class Policy:
             If True, selects the action with the highest Q-value (exploitation).
             If False, applies epsilon-greedy strategy to select an action.
         """
-        state = self._format_state(state)
-
-        is_on_policy = isinstance(self.network, (ConvPPO, AttentionPPO))
-
-        # --- PPO / A2C (On-Policy) ---
-        if is_on_policy:
-            with torch.no_grad():
-                dist, value = self.network(state)
-                if greedy:
-                    action = torch.argmax(dist.logits, dim=-1)
-                else:
-                    action = dist.sample()
-            return action.cpu().numpy(), (dist.log_prob(action), value.squeeze(-1))
-
-        # --- DQN (Off-Policy) ---
-        else:
-            if not greedy and np.random.rand() < self.epsilon_strategy.eps:
-                action = np.random.randint(0, self.network.output.out_features)
-            else:
-                with torch.no_grad():
-                    q_values = self.network(state)
-                    action = torch.argmax(q_values, dim=-1).item()
-            return action, (None, None)
+        # state = self._format_state(state)
+        #
+        # is_on_policy = isinstance(self.network, (ConvPPO, AttentionPPO))
+        #
+        # # --- PPO / A2C (On-Policy) ---
+        # if is_on_policy:
+        #     with torch.no_grad():
+        #         dist, value = self.network(state)
+        #         if greedy:
+        #             action = torch.argmax(dist.logits, dim=-1)
+        #         else:
+        #             action = dist.sample()
+        #     return action.cpu().numpy(), (dist.log_prob(action), value.squeeze(-1))
+        #
+        # # --- DQN (Off-Policy) ---
+        # else:
+        #     if not greedy and np.random.rand() < self.epsilon_strategy.eps:
+        #         action = np.random.randint(0, self.network.output.out_features)
+        #     else:
+        #         with torch.no_grad():
+        #             q_values = self.network(state)
+        #             action = torch.argmax(q_values, dim=-1).item()
+        #     return action, (None, None)
+        pass
 
 
     def save_network(self, path : str):
@@ -321,15 +262,6 @@ class Policy:
     def load_network(self, path : str):
         """Loads the model parameters from the specified path."""
         self.network.load_state_dict(torch.load(path, map_location=self.device))
-
-
-    def forward(self, state):
-        """
-        TODO: Consider to remove this method if not needed
-        Simply applies the forward() method of the network.
-        """
-        self.q_values = self.network(state)
-        return self.q_values
 
 
     @torch.no_grad()
