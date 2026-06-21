@@ -1,6 +1,5 @@
 # Sbatch folder
 sbatch_files/
-sbatch/
 
 # Logs folder
 logs/
