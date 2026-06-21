@@ -30,7 +30,7 @@ policy-loss:
   loss : "MSELoss"
 
 training:
-  device : "cpu"
+  device : "cuda"
   optimizer : "Adam"
   lr_init : 0.001
   lr_scheduler : "ExponentialLR"
