@@ -32,12 +32,17 @@ policy-loss:
 training:
   device : "cpu"
   optimizer : "Adam"
-  lr_init : 0.05
-  lr_scheduler : "StepLR"
+  lr_init : 0.001
+  lr_scheduler : "ExponentialLR"
   lr_step_size : 10
-  lr_gamma : 0.05
+  lr_gamma : 0.99
   n_epochs : 5
   n_episodes : 1000
+
+save:
+  checkpoint : 500
+  save_model : True
+  save_path : "./src/policy/models/attention-dqn/"
 
 pretrain:
 # network_model_path : "PUT-HERE-SOME-PATH.PT"

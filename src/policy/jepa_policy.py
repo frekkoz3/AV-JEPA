@@ -1,4 +1,5 @@
 from typing import Dict, Any, Tuple
+import copy
 
 import torch
 from numpy import floating
@@ -82,7 +83,7 @@ class PolicyDQN(Policy):
     def __init__(self, network : nn.Module, **kwargs):
         super().__init__(network, **kwargs)
         self.network = network
-        self.target_network = eval(kwargs.get("target_network", "AttentionDQN"))(**kwargs)
+        self.target_network = copy.deepcopy(network)
 
         self.epsilon_strategy = EpsilonGreedy(**kwargs)
         self.loss = MSELoss(**kwargs)
