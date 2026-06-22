@@ -1,9 +1,8 @@
 import torch
 from src.jepa.transformers import *
 
-"""
 model = VisualTransformer(
-    img_size=224,
+    img_size=(256, 412, 3),
     embed_dim=768,
     mlp_dim=3072,
     patch_size=16,
@@ -21,17 +20,17 @@ model = Transformer(
     dropout=0.0,
     use_adaLN=True,
 )
-
+"""
 device = "cuda"
 
 model.to(device=device)
 
-x = torch.randn(10, 10).to(device = device)
-c = torch.randint(0, 4, (10, 10), dtype=torch.float32).to(device = device)
+x = torch.randn(10, 3, 412, 256).to(device = device)
+# c = torch.randint(0, 4, (10, 10), dtype=torch.float32).to(device = device)
 
 num_classes = 5
 
-head = nn.Linear(5, num_classes)
+head = nn.Linear(768, num_classes)
 
 head.to(device=device)
 
@@ -45,8 +44,8 @@ optimizer = torch.optim.Adam(
 for step in range(1000):
     optimizer.zero_grad()
 
-    features = model(x, c)
-    logits = head(features)   # CLS token
+    features = model(x)
+    logits = head(features[:, 0])   # CLS token
 
     loss = F.cross_entropy(logits, labels)
 

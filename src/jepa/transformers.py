@@ -135,7 +135,7 @@ class VisualTransformer(nn.Module):
     def __init__(self, img_size, embed_dim, mlp_dim, patch_size=16, num_heads=8, depth=6):
         super().__init__()
         self.patch_embed = PatchEmbedding(in_channels=3, embed_dim=embed_dim, patch_size=patch_size)
-        self.pos_embed = PositionalEncoding(embed_dim=embed_dim, seq_len=(img_size//patch_size)**2)
+        self.pos_embed = PositionalEncoding(embed_dim=embed_dim, seq_len=(img_size[0]//patch_size)*(img_size[1]//patch_size))
         self.transformer = Transformer(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=embed_dim, depth=depth, num_heads=num_heads, mlp_dim=mlp_dim)
         self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
 

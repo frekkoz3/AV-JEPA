@@ -117,7 +117,7 @@ class JEPA(nn.Module):
 
 
 		self.encoder = encoder or transformers.VisualTransformer(
-			img_size=obs_shape[0], embed_dim=latent_dim, mlp_dim=mlp_dim, patch_size=vit_patch_size, num_heads=vit_heads, depth=vit_depth)
+			img_size=obs_shape, embed_dim=latent_dim, mlp_dim=mlp_dim, patch_size=vit_patch_size, num_heads=vit_heads, depth=vit_depth)
 		
 		self.action_encoder = action_encoder or ActionEncoder(num_actions=num_actions, embed_dim=action_embed_dim)
 		
