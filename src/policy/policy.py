@@ -73,8 +73,8 @@ class Policy:
         if environment:
             self._set_environment(environment, **kwargs)
         self._set_network(network, **kwargs)
-        if kwargs.get("model_path", None) is not None:
-            self.load_network(path = str(kwargs.get("model_path")))
+        if kwargs.get("network_model_path", None) is not None:
+            self.load_network(path = str(kwargs.get("network_model_path")))
         if self.device != "cpu":
             self.network.to(self.device)
         self._set_epsilon_strategy(epsilon_strategy, **kwargs)
@@ -489,37 +489,37 @@ class PolicyDQN(Policy):
         self.buffer = deque(maxlen=self.buffer_size)
         self.batch_size = kwargs.get("batch_size", 64)
 
-    @torch.no_grad()
-    def _full_buffer(self):
-        """Computes a buffer of size self.buffer_size of trajectories for Off-Policy DQN."""
-
-        while len(self.buffer) < self.buffer_size:
-
-            state = self.environment.reset()[0]
-
-            state = self._format_state(state)
-            is_terminal = False
-
-            while not is_terminal:
-                # Action is a scalar integer for a single environment
-                action, _ = self.get_action(state, greedy=False)
-
-                # Step returns scalars and standard Python booleans
-                next_state, reward, done, truncated, _ = self.environment.step(action)
-                is_terminal = done or truncated
-
-                next_state_formatted = self._format_state(next_state)
-
-                # convert to tensors and store in buffer
-                action = torch.tensor(action, dtype=torch.int64, device=self.device)
-                reward = torch.tensor(reward, dtype=torch.float32, device=self.device)
-                is_terminal = torch.tensor(is_terminal, dtype=torch.float32, device=self.device)
-
-                self.buffer.append((state, action, reward, next_state_formatted, is_terminal))
-                state = next_state_formatted
-
-        # shuffle the buffer to ensure decorrelation
-        random.shuffle(self.buffer)
+    # @torch.no_grad()
+    # def _full_buffer(self):
+    #     """Computes a buffer of size self.buffer_size of trajectories for Off-Policy DQN."""
+    #
+    #     while len(self.buffer) < self.buffer_size:
+    #
+    #         state = self.environment.reset()[0]
+    #
+    #         state = self._format_state(state)
+    #         is_terminal = False
+    #
+    #         while not is_terminal:
+    #             # Action is a scalar integer for a single environment
+    #             action, _ = self.get_action(state, greedy=False)
+    #
+    #             # Step returns scalars and standard Python booleans
+    #             next_state, reward, done, truncated, _ = self.environment.step(action)
+    #             is_terminal = done or truncated
+    #
+    #             next_state_formatted = self._format_state(next_state)
+    #
+    #             # convert to tensors and store in buffer
+    #             action = torch.tensor(action, dtype=torch.int64, device=self.device)
+    #             reward = torch.tensor(reward, dtype=torch.float32, device=self.device)
+    #             is_terminal = torch.tensor(is_terminal, dtype=torch.float32, device=self.device)
+    #
+    #             self.buffer.append((state, action, reward, next_state_formatted, is_terminal))
+    #             state = next_state_formatted
+    #
+    #     # shuffle the buffer to ensure decorrelation
+    #     random.shuffle(self.buffer)
 
 
     def _format_state(self, state : Any, bracket = True) -> torch.Tensor:
@@ -590,7 +590,7 @@ class PolicyDQN(Policy):
         then do one gradient step per transition (if buffer is warm)."""
 
         state = self.environment.reset()[0]
-        state = self._format_state(state, bracket=True)
+        state = self._format_state(state, bracket=False)
         is_terminal = False
         loss_sum, step_count, current_q = 0.0, 0, None
 
@@ -599,7 +599,7 @@ class PolicyDQN(Policy):
             next_state_raw, reward, done, truncated, _ = self.environment.step(action)
             is_terminal = done or truncated
             # print(f"Next State Raw: {next_state_raw.shape}")
-            next_state = self._format_state(next_state_raw)
+            next_state = self._format_state(next_state_raw, bracket=False)
             # print(f"Next State: {next_state.shape}")
 
             self.buffer.append((
@@ -632,12 +632,8 @@ class PolicyDQN(Policy):
                 # next_q  = self.target_network(b_next_states)
                 # target_q = b_rewards + self.reward_discount * next_q.max(dim=1)[0] * (1 - b_dones)
                 next_actions = self.network(b_next_states).argmax(dim=1, keepdim=True)
-
-                # 2. Use TARGET network to evaluate that specific action
                 next_q_target = self.target_network(b_next_states)
                 next_q_value = next_q_target.gather(1, next_actions).squeeze(1)
-
-                # 3. Compute Bellman Target
                 target_q = b_rewards + self.reward_discount * next_q_value * (1 - b_dones)
 
 
@@ -650,10 +646,12 @@ class PolicyDQN(Policy):
             loss_sum   += loss.item()
             step_count += 1
 
+
+        if current_q is not None:
+            if self.scheduler:
+                self.scheduler.step()
             self.epsilon_strategy.step()
 
-        if self.scheduler:
-            self.scheduler.step()
 
         if (self.epoch + 1) % self.target_net_update_freq == 0:
             self.target_network.load_state_dict(self.network.state_dict())
