@@ -20,8 +20,9 @@ class PlayEnv:
         self.config = config
         self.record = record
 
-        self.env = SnakeEnv(**config)
         self.policy = PolicyDQN(**config)
+        self.env = self.policy.environment
+        self.policy.network.eval()
 
         if self.record:
             self.video = cv2.VideoWriter(
