@@ -37,8 +37,8 @@ training:
   lr_gamma : 0.999
   n_inner_epochs: 5
   n_trajectories: 10000
-  buffer_size : 256
-  batch_size: 16
+  buffer_size : 20000
+  batch_size: 128
 
 save:
   checkpoint: 1000

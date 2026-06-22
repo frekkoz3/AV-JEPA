@@ -589,15 +589,18 @@ class PolicyDQN(Policy):
         """Collect one episode, add every transition to the rolling buffer,
         then do one gradient step per transition (if buffer is warm)."""
 
-        state = self._format_state(self.environment.reset()[0])
+        state = self.environment.reset()[0]
+        state = self._format_state(state, bracket=True)
         is_terminal = False
-        loss_sum, step_count = 0.0, 0
+        loss_sum, step_count, current_q = 0.0, 0, None
 
         while not is_terminal:
             action, _ = self.get_action(state, greedy=False)
             next_state_raw, reward, done, truncated, _ = self.environment.step(action)
             is_terminal = done or truncated
+            # print(f"Next State Raw: {next_state_raw.shape}")
             next_state = self._format_state(next_state_raw)
+            # print(f"Next State: {next_state.shape}")
 
             self.buffer.append((
                 state,
@@ -609,7 +612,7 @@ class PolicyDQN(Policy):
             state = next_state
 
             # Only train once buffer is warm
-            if len(self.buffer) < self.batch_size:
+            if len(self.buffer) < self.batch_size * 4:
                 continue
 
             batch = random.sample(self.buffer, self.batch_size)
@@ -622,11 +625,21 @@ class PolicyDQN(Policy):
             b_dones       = torch.stack(b_dones).to(self.device)
 
             q_values  = self.network(b_states)
+
             current_q = q_values.gather(1, b_actions.unsqueeze(1)).squeeze(1)
 
             with torch.no_grad():
-                next_q  = self.target_network(b_next_states)
-                target_q = b_rewards + self.reward_discount * next_q.max(dim=1)[0] * (1 - b_dones)
+                # next_q  = self.target_network(b_next_states)
+                # target_q = b_rewards + self.reward_discount * next_q.max(dim=1)[0] * (1 - b_dones)
+                next_actions = self.network(b_next_states).argmax(dim=1, keepdim=True)
+
+                # 2. Use TARGET network to evaluate that specific action
+                next_q_target = self.target_network(b_next_states)
+                next_q_value = next_q_target.gather(1, next_actions).squeeze(1)
+
+                # 3. Compute Bellman Target
+                target_q = b_rewards + self.reward_discount * next_q_value * (1 - b_dones)
+
 
             loss = self.loss(current_q, target_q)
             self.optimizer.zero_grad()
@@ -637,7 +650,8 @@ class PolicyDQN(Policy):
             loss_sum   += loss.item()
             step_count += 1
 
-        self.epsilon_strategy.step()
+            self.epsilon_strategy.step()
+
         if self.scheduler:
             self.scheduler.step()
 
@@ -649,17 +663,15 @@ class PolicyDQN(Policy):
 
         info = {
             "loss": mean_loss,
-            # "mean_value": current_q.mean().item()
+            "mean_value": current_q.mean().item() if current_q is not None else 0.0
         }
-        if self.epoch % 50 == 0:
-            self.buffer.clear()
 
         if self.epoch % 50 == 0:
              # Clear the buffer every 50 episodes to ensure fresh data collection and prevent overfitting to old transitions
             print(
                 f"Episode {self.epoch + 1}/{n_trajectories}"
                 f" | Loss: {info['loss']:.4f}"
-                # f" | MeanQ: {info['mean_value']:.4f}"
+                f" | MeanQ: {info['mean_value']:.4f}"
                 f" | Epsilon: {self.epsilon_strategy.eps:.4f}"
             )
         return info
