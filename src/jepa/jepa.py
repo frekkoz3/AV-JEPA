@@ -1,3 +1,5 @@
+# This was our first try implementing the rsults from LeWM
+
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -30,6 +32,7 @@ DEFAULT_PREDICTION_WEIGHT = 1.0
 DEFAULT_SIGREG_WEIGHT = 0.05
 DEFAULT_ACTOR_WEIGHT = 1.0
 
+# Deprecated
 class SIGReg(nn.Module):
 	"""Sketch isotropic Gaussian regularizer, adapted from LeWM."""
 
@@ -59,7 +62,6 @@ class SIGReg(nn.Module):
 		statistic = (err @ self.weights) * proj.size(-2)
 		return statistic.mean()
 
-
 class ActionEncoder(nn.Module):
 	"""Embed discrete actions into a learned action space, equivalent to LeWM Embedder."""
 
@@ -75,7 +77,6 @@ class ActionEncoder(nn.Module):
 	def forward(self, actions: torch.Tensor) -> torch.Tensor:
 		actions = actions.float()
 		return self.embed(actions)
-
 
 class JEPA(nn.Module):
 	"""End-to-end JEPA core."""
