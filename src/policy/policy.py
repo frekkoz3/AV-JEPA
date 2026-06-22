@@ -522,7 +522,7 @@ class PolicyDQN(Policy):
     #     random.shuffle(self.buffer)
 
 
-    def _format_state(self, state : Any, bracket = True) -> torch.Tensor:
+    def _format_state(self, state : Any, bracket = False) -> torch.Tensor:
         """Formats the input state into a suitable format for the PPO network."""
         state_tensor = state if isinstance(state, torch.Tensor) else torch.tensor(state, dtype=torch.float32, device=self.device)
 
@@ -706,9 +706,10 @@ class PolicyDQN(Policy):
 
         # Compute Target Q-Values for the next state using the target network
         with torch.no_grad():
-            next_q_values = self.target_network(next_state)
-            max_next_q_values, _ = torch.max(next_q_values, dim=-1)
-            target_q_values = rewards.squeeze(-1) + self.reward_discount * max_next_q_values.squeeze(-1) * (1 - dones.squeeze(-1))
+            next_actions = self.network(next_state).argmax(dim=1, keepdim=True)
+            next_q_target = self.target_network(next_state)
+            next_q_values = next_q_target.gather(1, next_actions).squeeze(-1)
+            target_q_values = rewards.squeeze(-1) + self.reward_discount * next_q_values.squeeze(-1) * (1 - dones.squeeze(-1))
 
         # Compute the loss (MSE) between online and target Q-Values
         loss = self.loss(online_q_values, target_q_values)
