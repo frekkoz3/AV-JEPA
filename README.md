@@ -24,4 +24,8 @@ More about the theoretical side in this [`document`](docs/notes.md).
 └── README.md       
 ```
 
+## Configuration Setup
+
+This version of the project is being developed using `Python 3.11` and `Cuda 12.6`. We **strongly suggest** to use them too.
+
 ## Quick Setup

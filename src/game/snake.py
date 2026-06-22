@@ -146,6 +146,11 @@ class SnakeEnv(gym.Env):
         self.info = {}
         return self._get_obs(), self.info
     
+    def death_state(self):
+        all_black = np.zeros((TOTAL_HEIGHT, WIDTH, 3), dtype=np.uint8)
+        all_black_t = np.transpose(all_black, (1, 0, 2))
+        return all_black_t
+    
     def _random_color(self):
         return random.choice(["red", "green", "yellow"])
     
