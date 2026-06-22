@@ -267,7 +267,7 @@ class SnakeEnv(gym.Env):
         return self.score
 
     def step(self, action):
-        self.info = {}
+        self.info = None
         if self.done:
             return self._get_obs(), 0.0, True, False, self.info
         

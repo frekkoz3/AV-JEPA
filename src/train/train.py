@@ -61,7 +61,12 @@ if __name__ == '__main__':
             a_t, _ = trainer.get_action(z_t)
             
             # Step the real environment
-            x_tp1, r_t, done, _, _ = env.step(a_t)
+            x_tp1, r_t, done, _, info = env.step(a_t)
+
+            # Check if the action is actually legit
+            if info:
+                a_t = info["act"]
+
             x_tp1 = cv2.resize(x_tp1, (IMG_SIZE, IMG_SIZE))
             z_tp1 = trainer.encoder(x_tp1)
 
