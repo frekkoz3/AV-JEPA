@@ -24,21 +24,19 @@ class OnlineTrajectoryBuffer:
         self.capacity = capacity
         self.buffer = deque(maxlen=capacity)
 
-    def push(self, x_t, z_t, a_t, r_t, x_tp1, z_tp1, done):
-        self.buffer.append((x_t, z_t, a_t, r_t, x_tp1, z_tp1, done))
+    def push(self, x_t, a_t, r_t, x_tp1, done):
+        self.buffer.append((x_t, a_t, r_t, x_tp1, done))
 
     def sample(self, batch_size: int) -> Tuple[torch.Tensor, ...]:
         batch = random.sample(self.buffer, batch_size)
-        x_t, z_t, a_t, r_t, x_tp1, z_tp1, done = zip(*batch)
+        x_t, a_t, r_t, x_tp1, done = zip(*batch)
         
         # Stack individual steps into batched tensors
         return (
             torch.stack(x_t),
-            torch.stack(z_t),
             torch.stack(a_t),
             torch.tensor(r_t, dtype=torch.float32).unsqueeze(-1),
             torch.stack(x_tp1),
-            torch.stack(z_tp1),
             torch.tensor(done, dtype=torch.float32).unsqueeze(-1)
         )
 
@@ -114,8 +112,6 @@ class ActiveE2EJEPATrainer:
             if done:
                 x_tp1 = self.env.death_state()
 
-            # x_tp1 = self._format_x(x_tp1)
-
             z_tp1 = self.encoder(x_tp1)
 
             z_states.append(z_t)
@@ -166,15 +162,21 @@ class ActiveE2EJEPATrainer:
         # This is completely decoupled
 
         # Sample online trajectory combinations
-        x_t, z_t, a_t, r_t, x_tp1, z_tp1, done = self.buffer.sample(batch_size)
+        x_t, a_t, r_t, x_tp1, done = self.buffer.sample(batch_size)
+        x_t = x_t.to(device=device)
+        a_t = a_t.to(device=device)
+        r_t = r_t.to(device=device)
+        x_tp1 = x_tp1.to(device=device)
+        done = done.to(device=device)
 
         # Regularization parameter
         alpha = 0.1
     
         # Latent Mappings
+        print(self.encoder.cls_token.device)
+        print(x_t.device)
         z_t = self.encoder(x_t)[:, 0, :]
         z_tp1_target = self.encoder(x_tp1)[:, 0, :]
-        # print(f"x_t dim : {x_t.shape} ; x_tp1 dim : {x_tp1.shape}")
         # Add a sequence dimension: [32, 64] -> [32, 1, 64]
         z_t_seq = z_t.unsqueeze(1) 
         # Pass through predictor and remove the sequence dimension: [32, 1, 64] -> [32, 64]
@@ -191,7 +193,7 @@ class ActiveE2EJEPATrainer:
             trajectory = self.compute_trajectory(z_t, horizon=self.horizon)
             loss_policy = self.policy.update_parameters(trajectory = trajectory)
         else:
-            loss_policy = self.policy.update_parameters(init_state = z_t.unsqueeze(1).detach(), next_state = z_tp1.unsqueeze(1).detach(), rewards = r_t.to(device=device), dones = done.to(device))
+            loss_policy = self.policy.update_parameters(init_state = z_t.unsqueeze(1).detach(), next_state = z_tp1_target.unsqueeze(1).detach(), rewards = r_t, dones = done)
 
         # Total multi-task execution loss
         # Since the losses are actually decoupled
@@ -204,6 +206,12 @@ class ActiveE2EJEPATrainer:
         self.optimizer.zero_grad()
         total_loss.backward()
         self.optimizer.step()
+
+        x_t = x_t.to(device="cpu")
+        a_t = a_t.to(device="cpu")
+        r_t = r_t.to(device="cpu")
+        x_tp1 = x_tp1.to(device="cpu")
+        done = done.to(device="cpu")
 
         return {"total_loss": total_loss.item(), "pred_loss": loss_pred.item(), "policy_loss": loss_policy.item()}
 

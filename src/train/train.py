@@ -16,7 +16,7 @@ import cv2
 import argparse
 import numpy as np
 
-TOTAL_EPOCHS = 16
+TOTAL_EPOCHS = 12
 STEPS_PER_EPOCH = 256
 BATCH_SIZE = 32
 ACTION_DIM = 4
@@ -83,15 +83,14 @@ if __name__ == '__main__':
                 print(f"z_t dim : {z_t.shape} ; z_tp1 dim : {z_tp1.shape}")
 
                 # Stream data into the experience buffer seamlessly
-                trainer.buffer.push(x_t.squeeze(0), z_t.detach().squeeze(0), torch.tensor(a_t).float().to(device=GPU), r_t, x_tp1.squeeze(0), z_tp1.detach().squeeze(0), float(done))
+                trainer.buffer.push(x_t.squeeze(0).to(device=CPU), torch.tensor(a_t).float().to(device=CPU), r_t, x_tp1.squeeze(0).to(device=CPU), float(done))
                 
                 if done:
-                    print("Dead")        
+                    print("Dead")       
                     # Reset        
                     x_t, _ = env.reset()
                     x_t = torch.tensor(np.expand_dims(x_t, 0)).float().to(device=GPU)
                 else:
-                    print(f"action : {a_t} , reward : {r_t}")
                     # Move forward
                     x_t = x_tp1
             
@@ -101,4 +100,4 @@ if __name__ == '__main__':
         metrics = trainer.update_parameters(BATCH_SIZE, epoch, TOTAL_EPOCHS, device = GPU)
         print(epoch)
         if metrics:
-            print(f"Epoch {epoch} Metrics -> Loss: {metrics['total_loss']:.4f} | Pred: {metrics['pred_loss']:.4f}")
+            print(f"Epoch {epoch} Metrics -> Loss: {metrics['total_loss']:.8f} | Pred: {metrics['pred_loss']:.8f} | Policy : {metrics['policy_loss']:.8f}")
