@@ -7,8 +7,8 @@ environment:
   n_actions : 4
   max_step : 1000
   reward_food : 20
-  reward_death :  -5
-  reward_step : -0.1
+  reward_death :  -20
+  reward_step : 0.1
 
 policy:
   network : "DQN"
@@ -37,8 +37,8 @@ training:
   lr_gamma : 0.999
   n_inner_epochs: 5
   n_trajectories: 10000
-  buffer_size : 10000
-  batch_size: 64
+  buffer_size : 256
+  batch_size: 16
 
 save:
   checkpoint: 1000
@@ -46,4 +46,4 @@ save:
   save_path: "./models/raw-policies/fc-dqn/"
 
 pretrain:
-  # network_model_path : "PUT-HERE-SOME-PATH.PT"
+  # model_path : "PUT-HERE-SOME-PATH.PT"

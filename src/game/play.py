@@ -3,12 +3,13 @@ Bla bla bla
 """
 import yaml
 import cv2
+import torch
 
 import argparse
 import pygame
 
 from src.game.snake import SnakeEnv
-from src.policy.policy import Policy
+from src.policy.policy import Policy, PolicyDQN, PolicyPPO
 from src.utils.utils import *
 
 
@@ -20,7 +21,7 @@ class PlayEnv:
         self.record = record
 
         self.env = SnakeEnv(**config)
-        self.policy = Policy(**config)
+        self.policy = PolicyDQN(**config)
 
         if self.record:
             self.video = cv2.VideoWriter(
@@ -64,6 +65,7 @@ class PlayEnv:
 
 
     def _play_bot(self):
+        print("hey")
         obs, info = self.env.reset()
 
         if self.record:
@@ -73,7 +75,9 @@ class PlayEnv:
         done = False
         trunc = False
         while not done and not trunc:
-            action, _ = self.policy.get_action(obs, greedy =True)
+            obs = self.policy._format_state(obs, bracket= True)
+            action, info = self.policy.get_action(obs, greedy = True)
+            print(info)
             obs, rew, done, trunc, info = self.env.step(action)
 
             if self.record:
