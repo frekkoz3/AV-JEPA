@@ -708,7 +708,7 @@ class PolicyDQN(Policy):
         with torch.no_grad():
             next_actions = self.network(next_state).argmax(dim=1, keepdim=True)
             next_q_target = self.target_network(next_state)
-            next_q_values = next_q_target.gather(1, next_actions).squeeze(-1)
+            next_q_values = next_q_target.gather(1, next_actions)
             target_q_values = rewards.squeeze(-1) + self.reward_discount * next_q_values.squeeze(-1) * (1 - dones.squeeze(-1))
 
         # Compute the loss (MSE) between online and target Q-Values
