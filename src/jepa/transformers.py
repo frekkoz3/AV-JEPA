@@ -80,9 +80,6 @@ class TransformerEncoderBlock(nn.Module):
             x = x + self.mlp(self.norm2(x))
         
         return x
-    
-    def is_modulated(self):
-        return self.do_adaLN_modulation
 
 
 class Transformer(nn.Module):
@@ -96,6 +93,7 @@ class Transformer(nn.Module):
         depth,
         num_heads,
         mlp_dim,
+        cond_dim=1,
         dropout=0.0,
         use_adaLN=False,
     ):
@@ -104,7 +102,9 @@ class Transformer(nn.Module):
         
         if input_dim != hidden_dim:
             self.input_proj = nn.Linear(input_dim, hidden_dim)
-            self.cond_proj = nn.Linear(input_dim, hidden_dim)
+
+        if cond_dim != hidden_dim:
+            self.cond_proj = nn.Linear(cond_dim, hidden_dim)
 
         if hidden_dim != output_dim:
             self.output_proj = nn.Linear(hidden_dim, output_dim)
@@ -119,16 +119,17 @@ class Transformer(nn.Module):
             x = self.input_proj(x)
 
         if c is not None and hasattr(self, "cond_proj"):
-            c = self.cond_proj(c)
+            c = self.cond_proj(c.unsqueeze(-1))
+            c = c[:, None, :]
 
         for block in self.layers:
-            x = block(x) if not block.is_modulated() else block(x, c) # this should be always block(x, c) for how it is implemented in transformer encoder block
+            x = block(x, c)
         x = self.norm(x)
 
         if hasattr(self, "output_proj"):
             x = self.output_proj(x)
         return x
-
+    
 class VisualTransformer(nn.Module):
     """Visual encoder with patch embedding and transformer backbone."""
 

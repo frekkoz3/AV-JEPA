@@ -13,7 +13,7 @@ from collections import deque
 from typing import Dict, Any, Tuple
 
 from src.game.snake import SnakeEnv
-from src.policy.algorithms import ConvPPO, AttentionPPO
+from src.policy.algorithms import ConvPPO, AttentionPPO, Policy
 
 # Experience Replay Buffer for Online Trajectories
 class OnlineTrajectoryBuffer:
@@ -55,9 +55,9 @@ class ActiveE2EJEPATrainer:
         env : SnakeEnv,
         encoder: nn.Module,
         predictor: nn.Module,
-        policy,
+        policy: Policy,
         action_dim: int,
-        latent_dim: int = 192,
+        embed_dim: int,
         lr: float = 1e-4,
         gamma: float = 0.99,
         buffer_capacity: int = 20000,
@@ -89,7 +89,7 @@ class ActiveE2EJEPATrainer:
             )
 
         # SIGReg projections base vector
-        self.register_buffer("u_m", F.normalize(torch.randn(latent_dim, 32), p=2, dim=0))
+        self.register_buffer("u_m", F.normalize(torch.randn(embed_dim, 32), p=2, dim=0))
 
 
     def register_buffer(self, name, tensor):
@@ -166,6 +166,8 @@ class ActiveE2EJEPATrainer:
 
         # Sample online trajectory combinations
         x_t, z_t, a_t, r_t, x_tp1, z_tp1, done = self.buffer.sample(batch_size)
+        print(a_t.shape)
+        print(z_t.shape)
 
         # Regularization parameter
         alpha = 0.1

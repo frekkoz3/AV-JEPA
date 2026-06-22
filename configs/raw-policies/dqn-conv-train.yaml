@@ -3,19 +3,20 @@ environment:
   n_environments: 1
   render_mode : "rgb_array"
   difficulty : 2
-  observation_type : "grid"
+  observation_type : "image"
   n_actions : 4
   reward_food: 200
   reward_death: -5
   reward_step: -0.5
 
 policy:
+  name : "PolicyDQN"
   network : "ConvDQN"
   horizon : 1
-  reward_discount : 0.995
+  reward_discount : 0.95
   epsilon_strategy: "EpsilonGreedy"
   epsilon_start: 1.0
-  epsilon_end: 0.
+  epsilon_end: 0.1
   epsilon_coeff: 0.999
 
 policy-network:
@@ -38,7 +39,7 @@ policy-loss:
   loss : "MSELoss"
 
 training:
-  device : "cpu"
+  device : "cuda"
   optimizer : "Adam"
   lr_init : 0.05
   lr_scheduler : "ExponentialLR"

@@ -149,7 +149,7 @@ class SnakeEnv(gym.Env):
     def death_state(self):
         if self.observation_type == "image":
             all_black = np.zeros((TOTAL_HEIGHT, WIDTH, 3), dtype=np.uint8)
-            all_black_t = np.transpose(all_black, (1, 0, 2))
+            all_black_t = np.transpose(all_black, (2, 0, 1)) # format for the ViT 
             return all_black_t
         else:
             return np.zeros((GRID_HEIGHT, GRID_WIDTH), dtype=np.uint8)
@@ -421,7 +421,7 @@ class SnakeEnv(gym.Env):
 
         img_array = pygame.surfarray.array3d(paint_surface)
 
-        return np.transpose(img_array.copy(), (1, 0, 2)) # openCV format
+        return np.transpose(img_array.copy(), (2, 0, 1)) # some format
 
     def render(self):
         frame = self._render_frame()
