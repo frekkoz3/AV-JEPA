@@ -5,9 +5,10 @@ environment:
   difficulty : 0
   observation_type : "grid"
   n_actions : 4
+  max_step : 1000
   reward_food : 20
-  reward_death :  -1
-  reward_step : 0.0
+  reward_death :  -5
+  reward_step : -0.1
 
 policy:
   network : "DQN"
@@ -15,14 +16,14 @@ policy:
   reward_discount : 0.995
   epsilon_strategy : "EpsilonGreedy"
   epsilon_start : 1.0
-  epsilon_end : 0.
+  epsilon_end : 0.05
   epsilon_coeff : 0.9995
 
 policy-network:
-  input_dim : 400
+  input_dim : 8
   output_dim : 4
   num_hidden_layer : 2
-  dim_hidden_layer : [16, 32]
+  dim_hidden_layer : [64, 32]
 
 policy-loss:
   loss : "MSELoss"
@@ -30,12 +31,14 @@ policy-loss:
 training:
   device : "cpu"
   optimizer : "Adam"
-  lr_init : 0.05
+  lr_init : 0.0005
   lr_scheduler : "ExponentialLR"
   lr_step_size : 10
   lr_gamma : 0.999
-  n_epochs: 5
-  n_episodes: 5000
+  n_inner_epochs: 5
+  n_trajectories: 10000
+  buffer_size : 256
+  batch_size: 16
 
 save:
   checkpoint: 1000
@@ -43,4 +46,4 @@ save:
   save_path: "./models/raw-policies/fc-dqn/"
 
 pretrain:
- network_model_path : "./models/raw-policies/fc-dqn/_final.pth"
+  network_model_path : "./models/raw-policies/fc-dqn/final.pth"
