@@ -84,7 +84,6 @@ class Policy:
 
     def _set_environment(self, environment : str, **kwargs):
         """Sets the environment for the policy."""
-        print(f"I entered here")
         maps = {
             "Snake": SnakeEnv,
         }
@@ -97,8 +96,8 @@ class Policy:
         assert "observation_type" in kwargs, f"Environment requires 'observation_type' parameter."
 
         num_envs = kwargs.get("n_environments", 1)
-        print(f"NUM ENVS: {num_envs}")
-        self.environment = gym.vector.SyncVectorEnv([lambda: maps[environment](**kwargs) for _ in range(num_envs)]) if num_envs > 1 else maps[environment](**kwargs)
+        self.environment = gym.vector.SyncVectorEnv([lambda: maps[environment](**kwargs) for _ in range(num_envs)]) \
+            if num_envs > 1 else maps[environment](**kwargs)
 
 
     def _set_network(self, network : str, **kwargs):
@@ -106,6 +105,7 @@ class Policy:
         maps = {
             "DQN": DQN,
             "ConvDQN": ConvDQN,
+            "ConvDQN2D": ConvDQN2D,
             "AttentionDQN": AttentionDQN,
             "ConvPPO": ConvPPO,
             "AttentionPPO": AttentionPPO
@@ -119,7 +119,7 @@ class Policy:
         if network == "DQN":
             assert "num_hidden_layer" in kwargs and "dim_hidden_layer" in kwargs, \
                 f"DQN requires 'num_hidden_layer' and 'dim_hidden_layer' parameters."
-        elif network == "ConvDQN" or network == "ConvPPO":
+        elif network == "ConvDQN" or network == "ConvPPO" or network == "ConvDQN2D":
             assert "num_conv_layer" in kwargs and "conv_layer_params" in kwargs, \
                 f"ConvDQN requires 'num_conv_layer' and 'conv_layer_params' parameters."
             assert "num_fc_layer" in kwargs and "dim_fc_layer" in kwargs, \
@@ -188,7 +188,6 @@ class Policy:
         assert loss in maps, \
             f"Loss function '{loss}' is not supported. Supported loss functions are: {list(maps.keys())}."
 
-        print(f"Using loss function: {loss}")
         self.loss = maps[loss](**kwargs)
 
 
@@ -333,7 +332,6 @@ class PolicyPPO(Policy):
                    state : torch.Tensor | Tuple[torch.Tensor, ...],
                    greedy = False) -> Tuple[torch.Tensor | Any, tuple[Any, Any]]:
         """Selects an action based on the current state using a policy derived from the PPO algorithm."""
-        print(state, state.shape)
         dist, value = self.network(state)
 
         if greedy:
@@ -470,7 +468,7 @@ class PolicyDQN(Policy):
 
     def __init__(self,**kwargs):
 
-        assert kwargs.get("network", "ConvDQN") in ["ConvDQN", "AttentionDQN", "DQN"], f"Invalid network type: {kwargs.get('network')}. Must be 'ConvDQN' or 'AttentionDQN' or 'DQN'."
+        assert kwargs.get("network", "ConvDQN") in ["ConvDQN", "ConvDQN2D", "AttentionDQN", "DQN"], f"Invalid network type: {kwargs.get('network')}. Must be 'ConvDQN' or 'AttentionDQN' or 'DQN'."
         assert kwargs.get("loss", "MSELoss") == "MSELoss", \
             f"Invalid loss type: {kwargs.get('loss')}. Must be 'MSELoss'."
         assert kwargs.get("epsilon_strategy", "EpsilonConstant") in ["EpsilonConstant", "EpsilonGreedy"], f"Invalid epsilon strategy: {kwargs.get('epsilon_strategy')}. Must be 'EpsilonConstant' or 'EpsilonGreedy'."
@@ -481,61 +479,73 @@ class PolicyDQN(Policy):
         self.target_net_update_freq = kwargs.get("target_update_freq", 25)
         self.epoch = 0
 
-        self.replay_buffer = deque(maxlen=kwargs.get("replay_buffer_size", 10000))
+        self.buffer_size = kwargs.get("buffer_size", 10000)
+        self.buffer = deque(maxlen=self.buffer_size)
         self.batch_size = kwargs.get("batch_size", 64)
 
+
     @torch.no_grad()
-    def _get_buffer(self, state):
-        """Computes a single trajectory buffer for Off-Policy DQN."""
-        state = self._format_state(state)
-        buffer = []
-        is_terminal = False
+    def _full_buffer(self):
+        """Computes a buffer of size self.buffer_size of trajectories for Off-Policy DQN."""
 
-        while not is_terminal:
-            # Action is a scalar integer for a single environment
-            action, _ = self.get_action(state, greedy=False)
+        while len(self.buffer) < self.buffer_size:
 
-            # Step returns scalars and standard Python booleans
-            next_state, reward, done, truncated, _ = self.environment.step(action)
-            is_terminal = done or truncated
+            state = self.environment.reset()[0]
 
-            next_state_formatted = self._format_state(next_state)
+            state = self._format_state(state)
+            is_terminal = False
 
-            buffer.append((state, action, reward, next_state_formatted, is_terminal))
-            state = next_state_formatted
+            while not is_terminal:
+                # Action is a scalar integer for a single environment
+                action, _ = self.get_action(state, greedy=False)
 
-        # Unpack the buffer
-        states, actions, rewards, next_states, dones = zip(*buffer)
+                # Step returns scalars and standard Python booleans
+                next_state, reward, done, truncated, _ = self.environment.step(action)
+                is_terminal = done or truncated
 
-        # states and next_states are tuples of tensors of shape [1, 1, 400]
-        # Concatenating them along dim=0 creates a valid 3D tensor -> [batch_size, 1, 400]
-        states = torch.cat(states, dim=0)
-        next_states = torch.cat(next_states, dim=0)
+                next_state_formatted = self._format_state(next_state)
 
-        # actions, rewards, and dones are tuples of standard Python scalars.
-        # Convert them directly to 1D tensors.
-        actions = torch.tensor(actions, dtype=torch.int64, device=self.device)
-        rewards = torch.tensor(rewards, dtype=torch.float32, device=self.device)
-        dones = torch.tensor(dones, dtype=torch.float32, device=self.device)
+                # convert to tensors and store in buffer
+                action = torch.tensor(action, dtype=torch.int64, device=self.device)
+                reward = torch.tensor(reward, dtype=torch.float32, device=self.device)
+                is_terminal = torch.tensor(is_terminal, dtype=torch.float32, device=self.device)
 
-        batch = (states, actions, rewards, next_states, dones)
-
-        episode_reward = rewards.sum().item()
-        episode_length = len(rewards)
-        score = self.environment.get_score()
-
-        print(
-            f"Reward={episode_reward:.2f}"
-            f" Score={score}"
-            f" Length={episode_length}"
-        )
-
-        return batch
+                self.buffer.append((state, action, reward, next_state_formatted, is_terminal))
+                state = next_state_formatted
 
 
-    def _format_state(self, state : Any) -> torch.Tensor:
+        # shuffle the buffer to ensure decorrelation
+        random.shuffle(self.buffer)
+
+
+    def _format_state(self, state : Any, bracket = True) -> torch.Tensor:
         """Formats the input state into a suitable format for the PPO network."""
         state_tensor = state if isinstance(state, torch.Tensor) else torch.tensor(state, dtype=torch.float32, device=self.device)
+
+        # Find 1 for head, 2 for food.
+        if bracket:
+            head_indices = (state_tensor == 1).nonzero(as_tuple=True)
+            food_indices = (state_tensor == 2).nonzero(as_tuple=True)
+
+            # Negative indexing extracts Y and X from the last two dimensions safely
+            head_y = head_indices[-2][0] if len(head_indices[-2]) > 0 else torch.tensor(0.0, device=self.device)
+            head_x = head_indices[-1][0] if len(head_indices[-1]) > 0 else torch.tensor(0.0, device=self.device)
+
+            food_y = food_indices[-2][0] if len(food_indices[-2]) > 0 else torch.tensor(0.0, device=self.device)
+            food_x = food_indices[-1][0] if len(food_indices[-1]) > 0 else torch.tensor(0.0, device=self.device)
+
+            # Inject the batch dimension here
+            state_brack = torch.tensor([head_x, head_y, food_x, food_y], dtype=torch.float32, device=self.device).unsqueeze(0)
+
+            return state_brack
+
+        if isinstance(self.network, ConvDQN2D):
+            # Conv2d expects (batch_size, in_channels, H, W)
+            if state_tensor.shape == (20, 20):
+                state_tensor = state_tensor.unsqueeze(0).unsqueeze(0) # Becomes (1, 1, 20, 20)
+            elif state_tensor.dim() == 3:
+                state_tensor = state_tensor.unsqueeze(1) # Becomes (batch_size, 1, 20, 20)
+            return state_tensor
 
         # 2. Flatten the 2D grid from the environment (20, 20) -> (1, 400)
         if state_tensor.shape == (20, 20):
@@ -561,24 +571,23 @@ class PolicyDQN(Policy):
 
     def train(self, init_state, n_trajectories):
         """DQN full training loop"""
-        states, actions, rewards, next_states, dones = self._get_buffer(init_state)
 
-        # 2. Push individual transitions to the persistent replay buffer
-        for i in range(len(states)):
-            self.replay_buffer.append((states[i], actions[i], rewards[i], next_states[i], dones[i]))
-
-        # 3. Do not train if the buffer does not have enough samples
-        if len(self.replay_buffer) < self.batch_size:
-            return {"loss": 0.0, "mean_value": 0.0}
+        self._full_buffer()
 
         # 4. Sample a random, decorrelated mini-batch
-        batch = random.sample(self.replay_buffer, self.batch_size)
+        batch = random.sample(self.buffer, self.batch_size)
+
+        # print(batch)
 
         b_states, b_actions, b_rewards, b_next_states, b_dones = zip(*batch)
-        b_states = torch.stack(b_states).to(self.device)
+
+        # Use torch.cat for states since they already have shape (1, 4)
+        b_states = torch.cat(b_states, dim=0).to(self.device)
+        b_next_states = torch.cat(b_next_states, dim=0).to(self.device)
+
+        # Keep torch.stack for scalars (actions, rewards, dones)
         b_actions = torch.stack(b_actions).to(self.device)
         b_rewards = torch.stack(b_rewards).to(self.device)
-        b_next_states = torch.stack(b_next_states).to(self.device)
         b_dones = torch.stack(b_dones).to(self.device)
 
         # 5. Compute Q-values and optimize

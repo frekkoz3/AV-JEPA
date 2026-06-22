@@ -147,6 +147,83 @@ class ConvDQN(nn.Module):
 
 
 
+class ConvDQN2D(nn.Module):
+    """
+    Convolutional Deep Q-Network for approximating Q-values.
+    The network applies 2D convolutional layers followed by fully connected layers to approximate Q-values.
+    """
+
+    def __init__(self,
+                 input_dim : int,
+                 output_dim : int,
+                 num_conv_layer : int,
+                 conv_layer_params : list[dict],
+                 num_fc_layer : int,
+                 dim_fc_layer : list[int],
+                 **kwargs):
+        """
+        Initializes the ConvDQN network.
+
+        Parameters
+        ----------
+        input_dim : int
+            Dimension of the input state.
+        output_dim : int
+            Dimension of the output Q-values (number of actions).
+        num_conv_layer : int
+            Number of convolutional layers in the network.
+        conv_layer_params : list[dict]
+            List of dictionaries containing parameters for each convolutional layer.
+            Each dictionary should contain 'out_channels', 'kernel_size', and 'stride'.
+        num_fc_layer : int
+            Number of fully connected layers in the network.
+        dim_fc_layer : list[int]
+            List of fully connected layer sizes.
+            The length of this list must be equal to num_fc_layer.
+        """
+        super(ConvDQN2D, self).__init__()
+
+        assert len(conv_layer_params) == num_conv_layer, \
+            (f"The number of convolutional layer parameters ({len(conv_layer_params)}) "
+             f"must match the number of convolutional layers ({num_conv_layer}).")
+        assert len(dim_fc_layer) == num_fc_layer, \
+            (f"The number of fully connected layer dimensions ({len(dim_fc_layer)}) "
+             f"must match the number of fully connected layers ({num_fc_layer}).")
+
+        self.conv_layers = nn.Sequential(*
+                                         [
+                                             nn.Sequential(
+                                                 nn.Conv2d(in_channels=1 if i==0 else conv_layer_params[i-1].get('out_channels', 4),
+                                                           out_channels=conv_layer_params[i].get('out_channels', 4),
+                                                           kernel_size=conv_layer_params[i].get('kernel_size', 3),
+                                                           stride=conv_layer_params[i].get('stride', 1)),
+                                                 nn.ReLU()
+                                             )
+                                             for i in range(num_conv_layer)
+                                         ]
+                                         )
+        self.fc_layers = nn.Sequential(*
+                                       [
+                                           nn.Sequential(
+                                               nn.Linear(dim_fc_layer[i], dim_fc_layer[i+1]),
+                                               nn.ReLU()
+                                           )
+                                           for i in range(num_fc_layer-1)
+                                       ]
+                                       )
+        self.output = nn.Linear(dim_fc_layer[-1], output_dim)
+
+
+    def forward(self, state):
+        """ Forward pass through the network. """
+        state = self.conv_layers(state)
+        state = torch.flatten(state, start_dim=1)
+        state = self.fc_layers(state)
+        q_values = self.output(state)
+        return q_values
+
+
+
 class AttentionDQN(nn.Module):
     """
     Attention-based Deep Q-Network for approximating Q-values.
