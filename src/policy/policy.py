@@ -333,6 +333,7 @@ class PolicyPPO(Policy):
                    state : torch.Tensor | Tuple[torch.Tensor, ...],
                    greedy = False) -> Tuple[torch.Tensor | Any, tuple[Any, Any]]:
         """Selects an action based on the current state using a policy derived from the PPO algorithm."""
+        print(state, state.shape)
         dist, value = self.network(state)
 
         if greedy:

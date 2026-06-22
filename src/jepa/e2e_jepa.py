@@ -12,6 +12,9 @@ import random
 from collections import deque
 from typing import Dict, Any, Tuple
 
+from src.game.snake import SnakeEnv
+
+
 # Experience Replay Buffer for Online Trajectories
 class OnlineTrajectoryBuffer:
     """Stores online transitions and serves randomized mini-batches 
@@ -47,7 +50,7 @@ class OnlineTrajectoryBuffer:
 class ActiveE2EJEPATrainer:
     def __init__(
         self,
-        env,
+        env : SnakeEnv,
         encoder: nn.Module,
         predictor: nn.Module,
         policy,
@@ -93,7 +96,8 @@ class ActiveE2EJEPATrainer:
 
     def get_action(self, state: torch.Tensor) -> Tuple[torch.Tensor | Any, tuple[Any, Any]]:
         """Phase-Based Exploration: Generates actions on live frames."""
-        return self.policy.get_action(state=state, greedy=False)
+        action, info = self.policy.get_action(state=state, greedy=False)
+        return action, info
 
 
     def compute_trajectory(self, z_t: torch.Tensor, horizon: int=1):

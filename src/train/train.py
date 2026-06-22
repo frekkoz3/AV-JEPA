@@ -5,11 +5,15 @@ r"""
  | |___ / __/| |__|_____| |_| | |___|  __/ ___ \ 
  |_____|_____|_____|     \___/|_____|_| /_/   \_\
 """
+import yaml
+
 from src.jepa.transformers import VisualTransformer, Transformer
-from src.policy.policy import Policy
+from src.policy.policy import Policy, PolicyDQN, PolicyPPO
 from src.game.snake import SnakeEnv, TOTAL_HEIGHT, WIDTH
 from src.jepa.e2e_jepa import *
+from src.utils.utils import *
 import cv2
+import argparse
 
 TOTAL_EPOCHS = 16
 STEPS_PER_EPOCH = 256
@@ -20,11 +24,21 @@ IMG_SIZE = 256
 EMBED_DIM = 64
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Active E2E-JEPA Training for Snake Game")
+    parser.add_argument("--config", type=str, required=True, help="Path to the YAML configuration file.")
+    args = parser.parse_args()
+
+    config_path = args.config
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    config = flat_config(config)
+
     
     trainer = ActiveE2EJEPATrainer(
+        env=SnakeEnv(**config),
         encoder=VisualTransformer(img_size=IMG_SIZE, embed_dim=EMBED_DIM, mlp_dim=16), # how does this work with non-squared images?
         predictor=Transformer(input_dim=EMBED_DIM, hidden_dim=EMBED_DIM, output_dim=EMBED_DIM, depth=6, num_heads=8, mlp_dim=16, use_adaLN=True),
-        policy=Policy(), # to understand better how to use this
+        policy=PolicyPPO(**config),
         action_dim=ACTION_DIM
     )
     
@@ -34,7 +48,7 @@ if __name__ == '__main__':
     
     for epoch in range(TOTAL_EPOCHS):
         if epoch % REFRESH_BUFFER == 0:
-            trainer.register_buffer.refresh()
+            trainer.buffer.refresh()
             
         for step in range(STEPS_PER_EPOCH):
             
