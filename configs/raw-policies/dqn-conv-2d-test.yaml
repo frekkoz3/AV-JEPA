@@ -4,7 +4,7 @@ environment:
   n_obstacles: 10
   max_step: 1000
 
-  render_mode: "rgb_array"
+  render_mode: "human"
   observation_type: "grid"
 
   difficulty: 0
@@ -64,4 +64,4 @@ save:
   save_path: "./models/raw-policies/conv-dqn/"
 
 pretrain:
-# network_model_path : "PUT-HERE-SOME-PATH.PT"
+  network_model_path : "./models/raw-policies/conv-dqn/ep_1201-10000.pth"

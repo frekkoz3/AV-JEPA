@@ -1,52 +1,66 @@
-env:
-  environment : "Snake"
-  render_mode : "human"
-  difficulty : 2
-  observation_type : "grid"
-  n_actions : 4
-  reward_food: 50
-  reward_death: -50
-  reward_step: 0.0
+environment:
+  environment: "Snake"
+  n_environments: 1
+  n_obstacles: 10
+  max_step: 1000
+
+  render_mode: "human"
+  observation_type: "image"
+
+  difficulty: 0
+  cell_size: 35
+  grid_width: 20
+  grid_height: 20
+  resources_path: "./src/game/resources"
+  fps: 10
+
+  n_actions: 4
+  reward_food: 20
+  reward_death: -5
+  reward_step: -0.5
+
 
 policy:
-  network : "AttentionPPO"
-  horizon : 64
+  pol_type : "PolicyPPO"
+  pol_network : "AttentionPPO"
+  pol_horizon : 64
   reward_discount : 0.995
+
   epsilon_strategy : "EpsilonConstant"
   epsilon_start : 1.0
   epsilon_end : 0.
   epsilon_coeff : 0.995
 
-policy-network:
-  input_dim : 400
-  output_dim : 4
-  dim_stack : 4
-  num_attention_layer : 4
-  attention_layer_params : [{"num_heads" : 4},
-                            {"num_heads" : 16},
-                            {"num_heads" : 40},
-                            {"num_heads" : 16}
+  pol_input_dim : 400
+  pol_output_dim : 4
+  pol_dim_stack : 4
+  pol_num_attention_layer : 4
+  pol_attention_layer_params : [{"pol_num_heads" : 4},
+                            {"pol_num_heads" : 16},
+                            {"pol_num_heads" : 40},
+                            {"pol_num_heads" : 16}
                             ]
-  num_fc_layer : 4
-  dim_fc_layer : [16, 128, 32, 8]
-  mini_batch_size : 8
+  pol_num_fc_layer : 4
+  pol_dim_fc_layer : [16, 128, 32, 8]
+  pol_mini_batch_size : 8
 
-policy-loss:
-  loss : "PPOLoss"
+  pol_loss : "PPOLoss"
   actor_coeff : 0.05
   critic_coeff : 0.5
   gae_coeff : 0.95
 
 training:
   device : "cpu"
+  n_inner_epochs: 5
+  n_trajectories: 10000
+
   optimizer : "Adam"
+
   lr_init : 0.01
   lr_scheduler : "StepLR"
   lr_step_size : 10
   lr_gamma : 0.05
-  loss : "PPOLoss"
-  n_epochs: 5
-  n_episodes: 1000
+
 
 save:
   checkpoint : 50
