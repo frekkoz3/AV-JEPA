@@ -13,7 +13,7 @@ from collections import deque
 from typing import Dict, Any, Tuple
 
 from src.game.snake import SnakeEnv
-
+from src.policy.algorithms import ConvPPO, AttentionPPO
 
 # Experience Replay Buffer for Online Trajectories
 class OnlineTrajectoryBuffer:
@@ -165,7 +165,7 @@ class ActiveE2EJEPATrainer:
         # This is completely decoupled
 
         # Sample online trajectory combinations
-        x_t, a_t, r_t, x_tp1, done = self.buffer.sample(batch_size)
+        x_t, z_t, a_t, r_t, x_tp1, z_tp1, done = self.buffer.sample(batch_size)
 
         # Regularization parameter
         alpha = 0.1
@@ -181,11 +181,12 @@ class ActiveE2EJEPATrainer:
         # Anti-Collapse Loss
         loss_sigreg = self.compute_sigreg(z_t)
 
-        if isinstance(self.policy, PolicyPPO):
+        if isinstance(self.policy, AttentionPPO) or isinstance(self.policy, ConvPPO):
+            # to handle differently
             trajectory = self.compute_trajectory(z_t, horizon=self.horizon)
             loss_policy = self.policy.update_parameters(trajectory = trajectory)
         else:
-            loss_policy = self.policy.update_parameters(init_state = z_t, next_state = z_tp1_pred, rewards = r_t, dones = done)
+            loss_policy = self.policy.update_parameters(init_state = z_t, next_state = z_tp1, rewards = r_t, dones = done)
 
         # Total multi-task execution loss
         # Since the losses are actually decoupled
