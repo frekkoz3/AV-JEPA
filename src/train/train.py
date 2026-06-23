@@ -10,7 +10,6 @@ import time
 import cv2 #will need for registration maybe
 import argparse
 import numpy as np
-import uuid
 import torch
 import shutil
 from pathlib import Path
@@ -28,17 +27,15 @@ GPU = "cuda"
 CPU = "cpu"
 XPU = "xpu"
 
-RUN_NAME = f"{time.time()} - {uuid.uuid1()}"
-DEFAULT_SAVE_LOCATION = f"models/e2e/{RUN_NAME}/"
-
 if __name__ == '__main__':
     """
         Quick usage (from the root of the project)
 
-        py -m src.train.train --config PATH-TO-CONFIG
+        py -m src.train.train --config PATH-TO-CONFIG --run-name RUN-NAME
     """   
     parser = argparse.ArgumentParser(description="Active E2E-JEPA Training for Snake Game")
     parser.add_argument("--config", type=str, required=True, help="Path to the YAML configuration file.")
+    parser.add_argument("--run-name", type=str, required=True, help="name of the run.")
 
     args = parser.parse_args()
 
@@ -47,8 +44,10 @@ if __name__ == '__main__':
         config = yaml.safe_load(f)
     config = flat_config(config)
 
+    run_name = args.run_name
+    default_save_location = f"models/e2e/{run_name}/"
     source = config_path
-    destination = f"models/e2e/{RUN_NAME}/config.yaml"
+    destination = f"{default_save_location}/config.yaml"
     Path(destination).parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(source, destination) # we preserve the exact configuration
 
@@ -58,7 +57,7 @@ if __name__ == '__main__':
     steps_per_epoch = config.get("steps_per_epoch", 256)
     batch_size = config.get("batch_size", 32)
     refresh_buffer = config.get("refresh_buffer_freq", 8)
-    where_save = config.get("save_path", DEFAULT_SAVE_LOCATION)
+    where_save = config.get("save_path", default_save_location)
     epochs_per_checkpoint = config.get("epochs_per_checkpoint", total_epochs//2)
     clean_checkpoints = config.get("clean_checkpoints", True)
 
