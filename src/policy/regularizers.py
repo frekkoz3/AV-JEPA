@@ -1,4 +1,6 @@
-"""Epsilon Policy Strategies"""
+"""Epsilon Policy & Parameters Regularization Strategies"""
+import torch
+
 
 class EpsilonGreedy:
     """Epsilon-greedy policy"""
@@ -52,17 +54,96 @@ class EpsilonConstant(EpsilonGreedy):
                          epsilon_coeff=1.0,
                          epsilon_end=kwargs.get("epsilon_end", 0.0))
 
-class Regularizer:
-    pass
 
+
+class Regularizer:
+    """Base class for Policy Loss regularization strategies."""
+    def __init__(self, **kwargs):
+        pass
+
+    def step(self, **kwargs):
+        """Updates the regularization weight according to the specific regularization strategy."""
+        pass
 
 class ExponentialRegularizer(Regularizer):
-    pass
+    """An exponentially increasing regularizer up to a given limit."""
+
+    def __init__(self,
+                 reg_weight_start : float | int = 0.001,
+                 reg_weight_end : float | int = 1,
+                 reg_weight_step : float | int = 1.01):
+
+        assert reg_weight_step > 1, \
+            f"Exponential growth step = {reg_weight_step} must be > 1."
+        assert reg_weight_start < reg_weight_end, \
+            f"Start weight = {reg_weight_start} must be < end weight = {reg_weight_end}."
+
+        self.reg_weight = reg_weight_start
+        self.reg_weight_end = reg_weight_end
+        self.reg_weight_step = reg_weight_step
+
+
+    def step(self, **kwargs):
+        """Updates the regularization weight according to the exponential growth coefficient and the maximum limit."""
+        if self.reg_weight < self.reg_weight_end:
+            self.reg_weight = min(self.reg_weight * self.reg_weight_step, self.reg_weight_end)
+        return self.reg_weight
+
 
 
 class LinearRegularizer(Regularizer):
-    pass
+
+    def __init__(self,
+                 reg_weight_start : float | int = 0.001,
+                 reg_weight_end : float | int = 1,
+                 reg_weight_step : float | int = 0.001):
+
+        assert reg_weight_step > 0, \
+            f"Linear growth step = {reg_weight_step} must be > 0."
+        assert reg_weight_start < reg_weight_end, \
+            f"Start weight = {reg_weight_start} must be < end weight = {reg_weight_end}."
+
+        self.reg_weight = reg_weight_start
+        self.reg_weight_end = reg_weight_end
+        self.reg_weight_step = reg_weight_step
 
 
-class PropToEncoderLossRegularizer(Regularizer):
-    pass
+    def step(self, **kwargs):
+        """Updates the regularization weight according to the linear growth step and the maximum limit."""
+        if self.reg_weight < self.reg_weight_end:
+            self.reg_weight = min(self.reg_weight + self.reg_weight_step, self.reg_weight_end)
+        return self.reg_weight
+
+
+
+class PropToOtherLossRegularizer(Regularizer):
+    """
+    A regularizer that takes the magnitude of the Loss to regularize `LossReg` and another target loss `LossTarget`.
+    It compares the magnitudes (log10) and returns a regularization value `ValueReg` so that:
+
+            ValueReg * log10(LossReg) = log10(TargetReg) / Threshold
+
+    Default value for Treshold = 10.
+    This allows the LossReg not to overcome the TargetLoss.
+    Useful for setting the alpha parameter for the SigReg loss.
+
+    Notes
+    -----
+    When given a Batch of point-wise losses, ValueReg is computed from the mean loss among the batch
+    """
+
+    def __init__(self, reg_threshold : float | int = 10., eps : float | int = 1e-8):
+        self.threshold = reg_threshold
+        self.eps = eps
+
+    def step(self, loss_reg : torch.Tensor, loss_target : torch.Tensor, **kwargs) -> float | int:
+        """Computes the regularization value based on the magnitudes of the regularized loss and the target loss."""
+        log_loss_reg = torch.log10(loss_reg + self.eps).mean(dim=0)
+        log_loss_target = torch.log10(loss_target + self.eps).mean(dim=0)
+        if torch.abs(log_loss_reg) < self.eps:
+            return 0.0
+
+        value_reg = log_loss_target / (log_loss_reg * self.threshold)
+        return float(value_reg.item())
+
+
