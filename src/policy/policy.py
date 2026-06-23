@@ -250,6 +250,9 @@ class Policy:
         if save_model:
             self.save_network(path=f"{folder_path}final.pth")
 
+    def update_parameters(self, **kwargs):
+        """Updates the parameters of the architecture based on policy gradient optimization."""
+        pass
 
 
 class PolicyPPO(Policy):
@@ -424,7 +427,7 @@ class PolicyPPO(Policy):
         return info
 
 
-    def update_parameters(self, trajectory : torch.Tensor | Tuple[torch.Tensor, ...]) -> Dict[str, float | Any]:
+    def update_parameters(self, trajectory : torch.Tensor | Tuple[torch.Tensor, ...], **kwargs) -> Dict[str, float | Any]:
         """
         Updates the parameters of the architecture based on policy gradient optimization.
 
