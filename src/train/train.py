@@ -1,16 +1,17 @@
 import yaml
-
-from src.jepa.transformers import VisualTransformer, Transformer
-from src.policy.policy import Policy, PolicyDQN, PolicyPPO
-from src.game.snake import SnakeEnv, TOTAL_HEIGHT, WIDTH, CELL_SIZE, BAR_HEIGHT
-from src.jepa.e2e_jepa import *
-from src.utils.utils import *
 import time
-import cv2
+import cv2 #will need for registration maybe
 import argparse
 import numpy as np
 import uuid
 import torch
+import shutil
+from pathlib import Path
+
+from src.jepa.transformers import VisualTransformer, Transformer
+from src.game.snake import SnakeEnv, TOTAL_HEIGHT, WIDTH, CELL_SIZE, BAR_HEIGHT
+from src.jepa.e2e_jepa import *
+from src.utils.utils import *
 
 ACTION_DIM = 4
 EMBED_DIM = 64
@@ -19,17 +20,12 @@ GPU = "cuda"
 CPU = "cpu"
 XPU = "xpu"
 
-DEFAULT_SAVE_LOCATION = f"models/{time.time()} - {uuid.uuid1()}.pkl"
+RUN_NAME = f"{time.time()} - {uuid.uuid1()}"
+DEFAULT_SAVE_LOCATION = f"models/e2e/{RUN_NAME}/"
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Active E2E-JEPA Training for Snake Game")
     parser.add_argument("--config", type=str, required=True, help="Path to the YAML configuration file.")
-    # parser.add_argument("--where", type=str, required=False, help="Where are the stored models' weights.", default=DEFAULT_SAVE_LOCATION)
-    # parser.add_argument("--total_epochs", type=int, required=False, default=5000, help="Total number of epochs for training")
-    # parser.add_argument("--steps_per_epoch", type=int, required=False, default=256, help="Number of steps per epoch")
-    # parser.add_argument("--batch_size", type=int, required=False, default=32, help="Batch size for training")
-    # parser.add_argument("--refresh_buffer", type=int, required=False, default=8, help="Epoch interval to refresh the buffer")
-    # where_save = args.where
 
     args = parser.parse_args()
 
@@ -38,6 +34,11 @@ if __name__ == '__main__':
         config = yaml.safe_load(f)
     config = flat_config(config)
 
+    source = config_path
+    destination = f"models/e2e/{RUN_NAME}/config.yaml"
+    Path(destination).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(source, destination) # we preserve the exact configuration
+
     # Training parameters
     DEVICE = config.get("device", "cuda" if torch.cuda.is_available() else "cpu")
     TOTAL_EPOCHS = config.get("n_epochs", 200)
@@ -45,6 +46,8 @@ if __name__ == '__main__':
     BATCH_SIZE = config.get("batch_size", 32)
     REFRESH_BUFFER = config.get("refresh_buffer_freq", 8)
     WHERE_SAVE = config.get("save_path", DEFAULT_SAVE_LOCATION)
+    EPOCHS_PER_CHECKPOINT = config.get("epochs_per_checkpoint", TOTAL_EPOCHS//2)
+    CLEAN_CHECKPOINTS = config.get("clean_checkpoints", True)
 
     # Environment parameters
     ACTION_DIM = config.get("action_dim", 4)
@@ -72,8 +75,6 @@ if __name__ == '__main__':
     pred_depth = config.get("pred_depth", 3)
     use_adaLN = config.get("use_adaLN", True)
     dropout = config.get("dropout", 0.0)
-
-
 
     trainer = ActiveE2EJEPATrainer(
         env=SnakeEnv(**config),
@@ -142,4 +143,22 @@ if __name__ == '__main__':
         if metrics:
             print(f"Epoch {epoch} Metrics -> Loss: {metrics['total_loss']:.8f} | Pred: {metrics['pred_loss']:.8f} | Policy : {metrics['policy_loss']:.8f}")
 
-        save_results(WHERE_SAVE, trainer.predictor, trainer.encoder, trainer.policy.network)
+        # Dynamically saving checkpoints and removing them
+        if epoch%EPOCHS_PER_CHECKPOINT == 0:
+            save_results(f"{WHERE_SAVE}{epoch//EPOCHS_PER_CHECKPOINT}.pkl", trainer.predictor, trainer.encoder, trainer.policy.network)
+            if CLEAN_CHECKPOINTS:
+                old = Path(f"{WHERE_SAVE}{epoch//EPOCHS_PER_CHECKPOINT - 1}.pkl")
+                if old.exists():
+                    old.unlink()
+    
+    if CLEAN_CHECKPOINTS:
+        import math
+        # Removing the last checkpoint searching for the correct index with floor and ceil functions
+        old_ceil = Path(f"{WHERE_SAVE}{math.ceil(TOTAL_EPOCHS//EPOCHS_PER_CHECKPOINT)}.pkl")
+        old_floor = Path(f"{WHERE_SAVE}{math.floor(TOTAL_EPOCHS//EPOCHS_PER_CHECKPOINT)}.pkl")
+        if old_ceil.exists():
+            old_ceil.unlink()
+        if old_floor.exists():
+            old_floor.unlink()
+
+    save_results(f"{WHERE_SAVE}final.pkl",  trainer.predictor, trainer.encoder, trainer.policy.network)
