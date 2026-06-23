@@ -77,7 +77,7 @@ class E2EJEPA:
         buffer_capacity: int = 20000,
         coupled_dynamic = False,
         horizon : int = 1,
-        alpha: Regularizer = LinearRegularizer(reg_weight_start=1, reg_weight_end=1, reg_weight_step=1),
+        alpha: Regularizer = None,#= LinearRegularizer(reg_weight_start=1, reg_weight_end=1, reg_weight_step=1),
         beta : Regularizer | None = None,
         pol_loss_regularizer: Regularizer | None = None
     ):

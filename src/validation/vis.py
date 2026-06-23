@@ -89,7 +89,7 @@ if __name__ == '__main__':
 
     load_results(args.weights, model.predictor, model.encoder, model.policy.network)
 
-    env = SnakeEnv(render_mode="human", observation_type="image")
+    env = SnakeEnv(render_mode="human", observation_type="image", difficulty=config.get("difficulty"))
 
     for episode in range(args.episodes):
 
