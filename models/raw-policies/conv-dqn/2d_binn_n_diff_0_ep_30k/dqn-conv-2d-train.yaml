@@ -28,7 +28,7 @@ policy:
   epsilon_strategy: "EpsilonGreedy"
   epsilon_start: 1.0
   epsilon_end: 0.
-  epsilon_coeff: 0.9995
+  epsilon_coeff: 0.99999
 
   pol_input_dim : 400
   pol_output_dim : 4
@@ -47,9 +47,9 @@ policy:
 
 
 training:
-  device : "cpu"
+  device : "cuda"
   n_inner_epochs: 5
-  n_trajectories: 10000
+  n_trajectories: 30000
 
   optimizer : "Adam"
   lr_init : 0.05
@@ -61,7 +61,7 @@ training:
 save:
   checkpoint: 1000
   save_model: True
-  save_path: "./models/raw-policies/conv-dqn/"
+  save_path: "./models/raw-policies/conv-dqn/2d_binn_n_diff_0_ep_30k/"
 
 pretrain:
 # network_model_path : "PUT-HERE-SOME-PATH.PT"

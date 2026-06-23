@@ -26,7 +26,7 @@ def save_results(where: str, predictor: nn.Module, encoder: nn.Module, policy_ne
     }, where)
 
 def load_results(where: str, predictor: nn.Module, encoder: nn.Module, policy_net: nn.Module):
-    ldr = torch.load(where, weights_only=False)
+    ldr = torch.load(where, weights_only=False, map_location="cpu")
     predictor.load_state_dict(ldr["predictor"])
     encoder.load_state_dict(ldr["encoder"])
     policy_net.load_state_dict(ldr["policy_net"])
