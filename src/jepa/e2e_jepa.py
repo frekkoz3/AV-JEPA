@@ -210,6 +210,7 @@ class E2EJEPA:
         # Anti-Collapse Loss
         loss_sigreg = self.compute_sigreg(z_t)
 
+
         if isinstance(self.policy.network, (AttentionPPO, ConvPPO)):
             # to handle differently
             trajectory = self.compute_trajectory(z_t, horizon=self.horizon)
@@ -242,7 +243,7 @@ class E2EJEPA:
 
         return {"total_loss": total_loss.item(),
                 "pred_loss": loss_pred.item(),
-                "policy_loss":  loss_policy.item(),
+                "policy_loss":  loss_policy,
                 "sigreg_loss": loss_sigreg.item()
                 }
 

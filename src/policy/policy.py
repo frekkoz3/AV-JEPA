@@ -734,7 +734,7 @@ class PolicyDQN(Policy):
         if self.epoch % self.target_net_update_freq == 0:
             self.target_network.load_state_dict(self.network.state_dict())
 
-        return loss
+        return loss.item()
 
 
 
