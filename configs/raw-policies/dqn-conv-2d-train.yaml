@@ -1,0 +1,67 @@
+environment:
+  environment: "Snake"
+  n_environments: 1
+  n_obstacles: 10
+  max_step: 1000
+
+  render_mode: "rgb_array"
+  observation_type: "grid"
+
+  difficulty: 0
+  cell_size: 35
+  grid_width: 20
+  grid_height: 20
+  resources_path: "./src/game/resources"
+  fps: 10
+
+  n_actions: 4
+  reward_food: 20
+  reward_death: -5
+  reward_step: 0.1
+
+policy:
+  pol_type : "PolicyDQN"
+  pol_network : "ConvDQN2D"
+  pol_horizon : 1
+  reward_discount : 0.995
+
+  epsilon_strategy: "EpsilonGreedy"
+  epsilon_start: 1.0
+  epsilon_end: 0.
+  epsilon_coeff: 0.99999
+
+  pol_input_dim : 400
+  pol_output_dim : 4
+  pol_num_conv_layer : 2
+  pol_conv_layer_params : [{
+    "out_channels" : 4,
+    "kernel_size" : 3,
+    "stride" : 1
+  }, {
+    "out_channels" : 8,
+    "kernel_size" : 3,
+    "stride" : 1
+  }]
+  pol_num_fc_layer : 3
+  pol_dim_fc_layer : [2048, 128, 32]
+
+
+training:
+  device : "cuda"
+  n_inner_epochs: 5
+  n_trajectories: 30000
+
+  optimizer : "Adam"
+  lr_init : 0.05
+  lr_scheduler : "ExponentialLR"
+  lr_step_size : 10
+  lr_gamma : 0.999
+
+
+save:
+  checkpoint: 1000
+  save_model: True
+  save_path: "./models/raw-policies/conv-dqn/2d_binn_n_diff_0_ep_30k/"
+
+pretrain:
+# network_model_path : "PUT-HERE-SOME-PATH.PT"
