@@ -70,6 +70,7 @@ if __name__ == '__main__':
     img_size = (width, total_height, 3)
     n_obstacles = config.get("n_obstacles", 10)
     fps = config.get("fps", 10)
+    difficulty = config.get("difficulty", 2)
 
     # Encoder parameters
     embed_dim = config.get("embedding_dim", 64)
@@ -89,7 +90,7 @@ if __name__ == '__main__':
     dropout = config.get("dropout", 0.0)
 
     trainer = E2EJEPA(
-        env=SnakeEnv(**config),
+        env=SnakeEnv(difficulty=difficulty, **config),
         encoder=VisualTransformer(img_size=img_size,
                                   embed_dim=embed_dim,
                                   patch_size=cell_size,
