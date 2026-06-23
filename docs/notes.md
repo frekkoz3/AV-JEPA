@@ -181,6 +181,8 @@ Instead of generating pixels (like traditional generative world models), it mode
 * **The Encoder ($enc_\theta$):** Implemented as a Vision Transformer ($\text{ViT-Tiny}$ with ~5M parameters). It maps a raw pixel frame observation $o_t$ into a compact, low-dimensional latent embedding vector $z_t$.
 * **The Predictor ($pred_\phi$):** A causal transformer backend (~10M parameters). Given a history of past latent embeddings $z_t$ and an action vector $a_t$, it autoregressively predicts the subsequent latent state representation $\hat{z}_{t+1}$. Action conditioning is injected progressively via Adaptive Layer Normalization ($\text{AdaLN}$).
 
+![lewm-framework](imgs/LeWM.png)
+
 ### Loss
 
 Unlike typical JEPAs that depend on complex multi-term objectives or training heuristics (like Exponential Moving Averages (EMA) or `stop-gradient` updates), LeWM optimizes a straightforward **two-term objective** end-to-end:
