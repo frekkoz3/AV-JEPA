@@ -24,7 +24,7 @@ encoder:
   embedding_dim : 64
   enc_mlp_dim : 256
   enc_n_heads : 4
-  enc_depth : 3
+  enc_depth : 6
   enc_patch_size : 35
   enc_patch_in_channels : 3
 
@@ -34,7 +34,7 @@ predictor:
   pred_cond_dim : 1
   pred_mlp_dim : 256
   pred_n_heads : 4
-  pred_depth : 3
+  pred_depth : 6
   use_AdaLN : True
   dropout : 0.0
 
@@ -48,8 +48,8 @@ policy:
 
   epsilon_strategy: "EpsilonGreedy"
   epsilon_start: 1.0
-  epsilon_end: 0.1
-  epsilon_coeff: 0.99915
+  epsilon_end: 0.05
+  epsilon_coeff: 0.9995
 
   pol_input_dim : 64
   pol_output_dim : 4
