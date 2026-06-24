@@ -60,6 +60,7 @@ if __name__ == '__main__':
     where_save = config.get("save_path", default_save_location)
     epochs_per_checkpoint = config.get("epochs_per_checkpoint", total_epochs//2)
     clean_checkpoints = config.get("clean_checkpoints", True)
+    load_checkpoints = config.get("load_checkpoints", False)
 
     # Environment parameters
     action_dim = config.get("action_dim", 4)
@@ -111,6 +112,8 @@ if __name__ == '__main__':
         action_dim=action_dim,
         embed_dim=embed_dim
     )
+    if load_checkpoints:
+        load_results(f"{where_save}final.pkl", trainer.predictor, trainer.encoder, trainer.policy.network)
     
     env = SnakeEnv(render_mode="rgb_array", observation_type="image", difficulty=difficulty)
     x_t, _ = env.reset()
