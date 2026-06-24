@@ -24,7 +24,7 @@ encoder:
   embedding_dim : 64
   enc_mlp_dim : 256
   enc_n_heads : 4
-  enc_depth : 3
+  enc_depth : 6
   enc_patch_size : 35
   enc_patch_in_channels : 3
 
@@ -34,7 +34,7 @@ predictor:
   pred_cond_dim : 1
   pred_mlp_dim : 256
   pred_n_heads : 4
-  pred_depth : 3
+  pred_depth : 6
   use_AdaLN : True
   dropout : 0.0
 
@@ -48,8 +48,8 @@ policy:
 
   epsilon_strategy: "EpsilonGreedy"
   epsilon_start: 1.0
-  epsilon_end: 0.1
-  epsilon_coeff: 0.99915
+  epsilon_end: 0.05
+  epsilon_coeff: 0.9995
 
   pol_input_dim : 64
   pol_output_dim : 4
@@ -69,9 +69,9 @@ policy:
 
 
 training:
-  device : "cpu"
+  device : "cuda"
 
-  n_epochs : 10000
+  n_epochs : 5
   steps_per_epoch : 256
 
   batch_size : 32
@@ -89,6 +89,8 @@ save:
   epochs_per_checkpoint: 500
   save_model: True
   clean_checkpoints : True
+  load_checkpoints : True
+  last_checkpoint : "final.pkl"
   #save_path: "./models/e2e/"
 
 load:

@@ -60,6 +60,8 @@ if __name__ == '__main__':
     where_save = config.get("save_path", default_save_location)
     epochs_per_checkpoint = config.get("epochs_per_checkpoint", total_epochs//2)
     clean_checkpoints = config.get("clean_checkpoints", True)
+    load_checkpoints = config.get("load_checkpoints", False)
+    load_checkpoints_path = config.get("load_checkpoints_path", f"{where_save}final.pkl")
 
     # Environment parameters
     action_dim = config.get("action_dim", 4)
@@ -111,6 +113,9 @@ if __name__ == '__main__':
         action_dim=action_dim,
         embed_dim=embed_dim
     )
+    if load_checkpoints:
+        checkpoint_name = config.get("last_checkpoint")
+        load_results(f"{default_save_location}/{checkpoint_name}", trainer.predictor, trainer.encoder, trainer.policy.network)
     
     env = SnakeEnv(render_mode="rgb_array", observation_type="image", difficulty=difficulty)
     x_t, _ = env.reset()
@@ -166,6 +171,10 @@ if __name__ == '__main__':
                   f"Policy : {metrics['policy_loss']:.8f} | "
                   f"SigReg: {metrics['sigreg_loss']:.8f}")
             metrics_collector.add_metric(metrics)
+            if not load_checkpoints:
+                metrics_collector.save_metrics(f"{where_save}metrics.csv", append = (epoch > 0))
+            else:
+                metrics_collector.save_metrics(f"{where_save}metrics.csv", append = True)
 
         # Dynamically saving checkpoints and removing them
         if epoch%epochs_per_checkpoint == 0:
@@ -189,4 +198,3 @@ if __name__ == '__main__':
             old_floor.unlink()
 
     save_results(f"{where_save}final.pkl",  trainer.predictor, trainer.encoder, trainer.policy.network)
-    metrics_collector.save_metrics(f"{where_save}metrics.csv")

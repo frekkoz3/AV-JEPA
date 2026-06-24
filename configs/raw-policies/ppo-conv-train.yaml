@@ -17,13 +17,15 @@ environment:
   n_actions: 4
   reward_food: 20
   reward_death: -5
-  reward_step: -0.5
+  reward_step: 0.1
 
 
 policy:
   pol_type : "PolicyPPO"
   pol_network : "ConvPPO"
-  pol_horizon : 64
+  pol_horizon : 2048
+  pol_mini_batch_size : 64
+  pol_n_inner_epochs : 10
   reward_discount : 0.995
 
   epsilon_strategy: "EpsilonConstant"
@@ -31,14 +33,14 @@ policy:
   epsilon_end: 0.
   epsilon_coeff: 0.995
 
-  pol_input_dim : 400
+  pol_input_dim : 8
   pol_output_dim : 4
   pol_num_conv_layer : 4
   pol_conv_layer_params : [{
     "out_channels" : 32,
     "kernel_size" : 16,
     "stride" : 1
-    },
+  },
     {
       "out_channels" : 16,
       "kernel_size" : 8,
@@ -69,19 +71,17 @@ training:
   n_epochs : 5
   n_trajectories : 1000
 
-  mini_batch_size: 8
-
   optimizer : "Adam"
-  lr_init : 0.01
-  lr_scheduler : "StepLR"
+  lr_init : 0.0005
+  lr_scheduler : "ExponentialLR"
   lr_step_size : 10
-  lr_gamma : 0.05
+  lr_gamma : 0.999
 
 
 save:
   checkpoint: 100
   save_model: True
-  save_path: "./src/policy/models/conv-ppo/"
+  save_path: "./models/raw-policies/conv-ppo/binn_y_re_20_m5_01/"
 
 pretrain:
 #  model_path : "./src/policy/models/conv-ppo/ep_101-1000.pth"
