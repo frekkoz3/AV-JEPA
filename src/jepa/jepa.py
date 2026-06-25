@@ -32,7 +32,6 @@ DEFAULT_PREDICTION_WEIGHT = 1.0
 DEFAULT_SIGREG_WEIGHT = 0.05
 DEFAULT_ACTOR_WEIGHT = 1.0
 
-# Deprecated
 class SIGReg(nn.Module):
 	"""Sketch isotropic Gaussian regularizer, adapted from LeWM."""
 

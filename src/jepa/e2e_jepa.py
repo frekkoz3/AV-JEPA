@@ -61,6 +61,39 @@ class OnlineTrajectoryBuffer:
     def __len__(self):
         return len(self.buffer)
 
+# SIGReg parameters
+DEFAULT_SIGREG_KNOTS = 17
+DEFAULT_SIGREG_NUM_PROJ = 128
+
+# SIGReg
+class SIGReg(nn.Module):
+	"""Sketch isotropic Gaussian regularizer, adapted from LeWM."""
+
+	def __init__(self, knots: int = DEFAULT_SIGREG_KNOTS, num_proj: int = DEFAULT_SIGREG_NUM_PROJ):
+		super().__init__()
+		self.num_proj = num_proj
+
+		t = torch.linspace(0, 3, knots, dtype=torch.float32)
+		dt = 3 / (knots - 1)
+		weights = torch.full((knots,), 2 * dt, dtype=torch.float32)
+		weights[[0, -1]] = dt
+		window = torch.exp(-t.square() / 2.0)
+
+		self.register_buffer("t", t)
+		self.register_buffer("phi", window)
+		self.register_buffer("weights", weights * window)
+
+	def forward(self, proj: torch.Tensor) -> torch.Tensor:
+		if proj.ndim != 3:
+			raise ValueError(f"SIGReg expects a 3D tensor, got shape {tuple(proj.shape)}")
+
+		projections = torch.randn(proj.size(-1), self.num_proj, device=proj.device)
+		projections = projections / projections.norm(p=2, dim=0, keepdim=True).clamp_min(1e-8)
+
+		x_t = (proj @ projections).unsqueeze(-1) * self.t
+		err = (x_t.cos().mean(dim=-3) - self.phi).square() + x_t.sin().mean(dim=-3).square()
+		statistic = (err @ self.weights) * proj.size(-2)
+		return statistic.mean()
 
 # E2E-JEPA
 class E2EJEPA:
@@ -84,6 +117,7 @@ class E2EJEPA:
         self.env = env
         self.encoder = encoder
         self.predictor = predictor
+        self.sigreg = SIGReg()
         self.policy = policy
         self.action_dim = action_dim
         self.gamma = gamma
@@ -164,15 +198,6 @@ class E2EJEPA:
 
         return batch
 
-
-    def compute_sigreg(self, z: torch.Tensor) -> torch.Tensor:
-            """Sketched-Isotropic-Gaussian Regularizer."""
-            h = torch.matmul(z, self.u_m.to(z.device))
-            h_mean = h.mean(dim=0, keepdim=True)
-            h_std = h.std(dim=0, keepdim=True) + 1e-6
-            return torch.mean((h_std - 1.0) ** 2) + torch.mean(h_mean ** 2)
-
-
     def update_parameters(self, batch_size: int, device : str = "cuda") -> Dict[str, float]:
         """Samples from active trajectory memory and performs backpropagation."""
         if len(self.buffer) < batch_size:
@@ -205,11 +230,10 @@ class E2EJEPA:
               f"z_tp1_pred : {z_tp1_pred[0][0].cpu().detach().numpy()}\n")
 
         # Prediction Loss
-        loss_pred = F.mse_loss(z_tp1_pred, z_tp1_target.detach())
+        loss_pred = F.mse_loss(z_tp1_pred, z_tp1_target)
 
         # Anti-Collapse Loss
-        loss_sigreg = self.compute_sigreg(z_t)
-
+        loss_sigreg = self.sigreg(z_t)
 
         if isinstance(self.policy.network, (AttentionPPO, ConvPPO)):
             # to handle differently
