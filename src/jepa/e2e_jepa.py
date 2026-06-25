@@ -38,6 +38,7 @@ class OnlineTrajectoryBuffer:
     def __init__(self, capacity: int = 4096):
         self.capacity = capacity
         self.buffer = deque(maxlen=capacity)
+        self.seq_idx = 0
 
     def push(self, x_t, a_t, r_t, x_tp1, done):
         self.buffer.append((x_t, a_t, r_t, x_tp1, done))
@@ -47,6 +48,24 @@ class OnlineTrajectoryBuffer:
         x_t, a_t, r_t, x_tp1, done = zip(*batch)
         
         # Stack individual steps into batched tensors
+        return (
+            torch.stack(x_t),
+            torch.stack(a_t),
+            torch.tensor(r_t, dtype=torch.float32).unsqueeze(-1),
+            torch.stack(x_tp1),
+            torch.tensor(done, dtype=torch.float32).unsqueeze(-1)
+        )
+
+    def sequential_sample(self, batch_size: int) -> Tuple[torch.Tensor, ...]:
+        """Returns a sequential batch of transitions for temporal analysis."""
+        if len(self.buffer) < batch_size:
+            raise ValueError("Not enough samples in buffer to sample sequentially.")
+       
+        start_idx = self.seq_idx if len(self.buffer) >= self.seq_idx + batch_size else self.seq_idx + batch_size % len(self.buffer)
+        batch = list(self.buffer)[start_idx:start_idx + batch_size]
+        x_t, a_t, r_t, x_tp1, done = zip(*batch)
+        self.seq_idx = (self.seq_idx + batch_size)
+        
         return (
             torch.stack(x_t),
             torch.stack(a_t),
