@@ -38,7 +38,6 @@ class OnlineTrajectoryBuffer:
     def __init__(self, capacity: int = 4096):
         self.capacity = capacity
         self.buffer = deque(maxlen=capacity)
-        self.seq_idx = 0
 
     def push(self, x_t, a_t, r_t, x_tp1, done):
         self.buffer.append((x_t, a_t, r_t, x_tp1, done))
@@ -46,7 +45,7 @@ class OnlineTrajectoryBuffer:
     def sample(self, batch_size: int) -> Tuple[torch.Tensor, ...]:
         batch = random.sample(self.buffer, batch_size)
         x_t, a_t, r_t, x_tp1, done = zip(*batch)
-        
+
         # Stack individual steps into batched tensors
         return (
             torch.stack(x_t),
@@ -56,16 +55,21 @@ class OnlineTrajectoryBuffer:
             torch.tensor(done, dtype=torch.float32).unsqueeze(-1)
         )
 
+
+    def refresh(self):
+        self.buffer = deque(maxlen=self.capacity)
+
+
     def sequential_sample(self, batch_size: int) -> Tuple[torch.Tensor, ...]:
         """Returns a sequential batch of transitions for temporal analysis."""
         if len(self.buffer) < batch_size:
             raise ValueError("Not enough samples in buffer to sample sequentially.")
-       
+
         start_idx = self.seq_idx if len(self.buffer) >= self.seq_idx + batch_size else self.seq_idx + batch_size % len(self.buffer)
         batch = list(self.buffer)[start_idx:start_idx + batch_size]
         x_t, a_t, r_t, x_tp1, done = zip(*batch)
         self.seq_idx = (self.seq_idx + batch_size)
-        
+
         return (
             torch.stack(x_t),
             torch.stack(a_t),
@@ -74,31 +78,15 @@ class OnlineTrajectoryBuffer:
             torch.tensor(done, dtype=torch.float32).unsqueeze(-1)
         )
 
-    def refresh(self):
-        self.buffer = deque(maxlen=self.capacity)
-
 
     def sample_sequences(self, seq_len: int, batch_size: int, device : str = "cpu") -> Tuple[torch.Tensor, ...] | None:
         """Samples sequences of transitions for training."""
-        states, actions, rewards, dones = [], [], [], []
-        attempt = 0
-
         if len(self.buffer) < seq_len:
             return None
 
+        states, actions, rewards, dones = [], [], [], []
         while len(states) < batch_size:
-            if attempt > batch_size * 2:
-                break
-            attempt += 1
-
             start_idx = random.randint(0, len(self.buffer) - seq_len)
-            # A sequence is valid if all but the last transition are not terminal
-            valid_seq = not any(
-                self.buffer[start_idx + i][4] == 1.0
-                for i in range(seq_len - 1)
-            )
-            if not valid_seq:
-                continue
 
             s_seq, a_seq, r_seq, d_seq = [], [], [], []
             for i in range(start_idx, start_idx+seq_len):
@@ -113,15 +101,12 @@ class OnlineTrajectoryBuffer:
             rewards.append(torch.stack(r_seq))
             dones.append(torch.stack(d_seq))
 
-        if len(states) == batch_size:
-            return (
-                torch.stack(states).to(device),  # Shape: (batch_size, seq_len, ...)
-                torch.stack(actions).to(device),  # Shape: (batch_size, seq_len, ...)
-                torch.stack(rewards).to(device),  # Shape: (batch_size, seq_len, 1)
-                torch.stack(dones).to(device)     # Shape: (batch_size, seq_len, 1)
-            )
-        else:
-            return None
+        return (
+            torch.stack(states).to(device),  # Shape: (batch_size, seq_len, ...)
+            torch.stack(actions).to(device),  # Shape: (batch_size, seq_len, ...)
+            torch.stack(rewards).to(device),  # Shape: (batch_size, seq_len, 1)
+            torch.stack(dones).to(device)     # Shape: (batch_size, seq_len, 1)
+        )
 
     def __len__(self):
         return len(self.buffer)
