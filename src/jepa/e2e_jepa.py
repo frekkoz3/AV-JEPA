@@ -287,9 +287,6 @@ class E2EJEPA:
 
         x_seq, a_seq, r_seq, done_seq = batch
 
-        B, T = x_seq.shape[0], x_seq.shape[1]
-        context_length = T-1
-
         z_seq = self.encode(x_seq)
 
         context_embedding = z_seq[:, :-1]
