@@ -50,7 +50,10 @@ if __name__ == '__main__':
     source = config_path
     destination = f"{default_save_location}/config.yaml"
     Path(destination).parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(source, destination) # we preserve the exact configuration
+    try:
+        shutil.copy(source, destination) # we preserve the exact configuration
+    except Exception as e:
+        print(e)
 
     # Training parameters
     device = config.get("device", "cuda" if torch.cuda.is_available() else "cpu")
@@ -190,7 +193,6 @@ if __name__ == '__main__':
             starting_epochs = 0
             if load_checkpoints and checkpoint_name.endswith(".pkl") and epoch :
                 tag = checkpoint_name[:-4]
-                print(tag)
                 try:
                     starting_epochs = int(tag.split("/")[-1])
                 except:
