@@ -73,53 +73,78 @@ class SnakeEnv(gym.Env):
 
         self.max_step = max_step
 
-        self.reset()        
-
-    def _load_and_scale_sprites(self, update = False):
-        """Loads assets and resizes them to match your environment's CELL_SIZE."""
-        def load_sp(path):
-            img = pygame.image.load(path).convert_alpha()
-            return pygame.transform.scale(img, (CELL_SIZE, CELL_SIZE))
-        
-        self.sprites = {}
-        colors = ["red", "green", "yellow"]
-        components = ["head", "body", "tail", "ul", "ur", "dl", "dr", "apple"]
-        
-        for color in colors:
-            for comp in components:
-                self.sprites[f"{color}_{comp}"] = load_sp(f"{RESOURCES_PATH}{color}/{comp}.png")
-
-        # Obstacles
-        obstacles = ["bomb", "rock", "skull"]
-        if self.difficulty > 2:
-            obstacles.append("purple_apple")
-            obstacles.append("violet_apple")
-
-        for i, obs in enumerate(obstacles):
-            self.sprites[f"obstacle_{i}"] = load_sp(f"{RESOURCES_PATH}obstacles/{obs}.png")
-
-        grass_categories = ["neutral", "flower", "white"]
-
-        for piece in grass_categories:
-            i = 1
-            while os.path.exists(f"{RESOURCES_PATH}grass/{piece}_{i}.png"):
-                self.sprites[f"{piece}_{i}"] = load_sp(f"{RESOURCES_PATH}grass/{piece}_{i}.png")
-                i += 1
-
-        self._blit_background(update = update)
-        self.sprites_loaded = True
-
-    def reset(self, seed=None, options=None):
-        super().reset(seed=seed)
-
+        self.sprites_loaded = False
         self.window = None
         self.canvas = None  
         self.clock = None
         self.font = None
+        self._load_and_scale_sprites()  
+        self.reset()
+        
+    def _load_and_scale_sprites(self):
+        """Loads assets and resizes them to match the environment's CELL_SIZE. In addiction initialize pygame"""
+
+        if self.window is None and self.canvas is None:
+            pygame.init()
+            pygame.font.init()
+
+            font_path = os.path.join(RESOURCES_PATH, "font", "minecraft", "Minecraft.ttf")
+            
+            try:
+                self.font = pygame.font.Font(font_path, 16)
+            except FileNotFoundError:
+                print(f"Warning: Custom font not found at {font_path}. Falling back to Arial.")
+                self.font = pygame.font.SysFont("Arial", 24, bold=True)
+            
+            if self.render_mode == "human":
+                self.window = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT))
+                pygame.display.set_caption("Snake Environment")
+                self.clock = pygame.time.Clock()
+            else:
+                os.environ["SDL_VIDEODRIVER"] = "dummy"
+                try:
+                    self.canvas = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT), pygame.HIDDEN)
+                except pygame.error:
+                    self.canvas = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT))
+
+        def load_sp(path):
+            img = pygame.image.load(path).convert_alpha()
+            return pygame.transform.scale(img, (CELL_SIZE, CELL_SIZE))
+        
+        if not self.sprites_loaded:
+        
+            self.sprites = {}
+            colors = ["red", "green", "yellow"]
+            components = ["head", "body", "tail", "ul", "ur", "dl", "dr", "apple"]
+            
+            for color in colors:
+                for comp in components:
+                    self.sprites[f"{color}_{comp}"] = load_sp(f"{RESOURCES_PATH}{color}/{comp}.png")
+
+            # Obstacles
+            obstacles = ["bomb", "rock", "skull"]
+            if self.difficulty > 2:
+                obstacles.append("purple_apple")
+                obstacles.append("violet_apple")
+
+            for i, obs in enumerate(obstacles):
+                self.sprites[f"obstacle_{i}"] = load_sp(f"{RESOURCES_PATH}obstacles/{obs}.png")
+
+            grass_categories = ["neutral", "flower", "white"]
+
+            for piece in grass_categories:
+                i = 1
+                while os.path.exists(f"{RESOURCES_PATH}grass/{piece}_{i}.png"):
+                    self.sprites[f"{piece}_{i}"] = load_sp(f"{RESOURCES_PATH}grass/{piece}_{i}.png")
+                    i += 1
+
+            self.sprites_loaded = True
+
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
+
         self.total_step = 0
         self.score = 0         
-        
-        self.sprites_loaded = False
 
         self.snake = [(random.randrange(2, GRID_WIDTH - 2), random.randrange(2, GRID_HEIGHT-2))]
         start_x = self.snake[0][0]
@@ -139,12 +164,13 @@ class SnakeEnv(gym.Env):
 
         self._place_food()
         if self.difficulty > 1:
-            self._place_obstacles(update = False)
+            self._place_obstacles(reset = True)
 
         self.done = False
         self.score = 0
         self.total_step = 0
         self.info = {}
+        self._blit_background(reset = True)
         return self._get_obs(), self.info
     
     def death_state(self):
@@ -167,27 +193,27 @@ class SnakeEnv(gym.Env):
             if self.food not in self.snake and self.food not in self.obstacles:
                 break
 
-    def _place_obstacles(self, update = False):
-        if not update:
+    def _place_obstacles(self, reset = True):
+        if reset: # Positioning all the obstacles
             while len(self.obstacles) < N_OBSTACLES:
                 obs = (random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1))
                 if self.food != obs and obs not in self.snake and obs not in self.obstacles:
                     self.obstacles.append(obs)
-        else:
+        else: # Just adding one new obstacle
             self.obstacles.pop()
             while True:
                 obs = (random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1))
                 if self.food != obs and obs not in self.snake and obs not in self.obstacles:
                     self.obstacles.append(obs)
-                    self._blit_background(update=True)
+                    self._blit_background(reset=False)
                     break
 
-    def _blit_background(self, update = False):
+    def _blit_background(self, reset = True):
         # Grass
         grass_categories = ["neutral", "flower", "white"]
         obstacles_tiles = [k for k in self.sprites.keys() if "obstacle" in k]
 
-        if not update:
+        if reset: # Setting for the first time everything
             self.grass_background = pygame.Surface((WIDTH, GAME_HEIGHT))
             self.grass_tiles = [['' for j in range (GRID_WIDTH)] for i in range (GRID_HEIGHT)]
 
@@ -220,7 +246,7 @@ class SnakeEnv(gym.Env):
                     self.obstacles_tiles.append(tile)
                     self.grass_background.blit(self.sprites[tile], (x * CELL_SIZE, y * CELL_SIZE) )
 
-        else:
+        else: # Just updating the new obstacles
             # Grass
             for row in range(GRID_HEIGHT):
                 for col in range(GRID_WIDTH):                    
@@ -309,7 +335,7 @@ class SnakeEnv(gym.Env):
             self.current_apple_type = self._random_apple()
             self._place_food()
             if self.difficulty>2:
-                self._place_obstacles(update = True)
+                self._place_obstacles(reset = False)
             if self.difficulty == 0: # it does not increse the size
                 self.snake.pop()
         else:
@@ -330,31 +356,6 @@ class SnakeEnv(gym.Env):
 
     def _render_frame(self):
         """Internal worker function that draws the frame onto the canvas."""
-        if self.window is None and self.canvas is None:
-            pygame.init()
-            pygame.font.init()
-
-            font_path = os.path.join(RESOURCES_PATH, "font", "minecraft", "Minecraft.ttf")
-            
-            try:
-                self.font = pygame.font.Font(font_path, 16)
-            except FileNotFoundError:
-                print(f"Warning: Custom font not found at {font_path}. Falling back to Arial.")
-                self.font = pygame.font.SysFont("Arial", 24, bold=True)
-            
-            if self.render_mode == "human":
-                self.window = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT))
-                pygame.display.set_caption("Snake Environment")
-                self.clock = pygame.time.Clock()
-            else:
-                os.environ["SDL_VIDEODRIVER"] = "dummy"
-                try:
-                    self.canvas = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT), pygame.HIDDEN)
-                except pygame.error:
-                    self.canvas = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT))
-
-        if not self.sprites_loaded:
-            self._load_and_scale_sprites(update = False)
 
         paint_surface = self.window if self.render_mode == "human" else self.canvas
         
