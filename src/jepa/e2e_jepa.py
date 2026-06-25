@@ -282,10 +282,7 @@ class E2EJEPA:
         # Transforms (B, T) -> (B, T, action_dim) to match transformer.py's action_proj
         if ctx_act.dim() == 2:
             ctx_act = F.one_hot(ctx_act.long(), num_classes=self.action_dim).float()
-        elif ctx_act.dim() == 3 and ctx_act.shape[-1] == 1:
-            ctx_act = F.one_hot(ctx_act.squeeze(-1).long(), num_classes=self.action_dim).float()
 
-        # The new transformer.py natively handles causal masking internally
         return self.predictor(ctx_emb, ctx_act)
 
 

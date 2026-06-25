@@ -222,11 +222,8 @@ class Predictor(nn.Module):
         # Maps (B, T, action_dim) → (B, T, hidden_dim) so conditioning has
         # the same dimension as the hidden state (fed as `c` to AdaLN blocks).
         # REF: module.py::Embedder — Conv1d + MLP action embedding.
-        self.action_proj = nn.Sequential(
-            nn.Linear(action_dim, hidden_dim * 4),
-            nn.SiLU(),
-            nn.Linear(hidden_dim * 4, hidden_dim),
-        )
+        self.action_proj = nn.Linear(action_dim, hidden_dim)
+
 
         # ── Causal transformer core ────────────────────────────────────────
         # cond_dim=hidden_dim because action_proj already maps to hidden_dim.
@@ -257,5 +254,6 @@ class Predictor(nn.Module):
         T = x.size(1)
         x = x + self.pos_embedding[:, :T]   # add temporal positional encoding
         x = self.dropout(x)
+        print(a.shape)
         c = self.action_proj(a)              # (B, T, hidden_dim)
         return self.transformer(x, c, causal=True)
