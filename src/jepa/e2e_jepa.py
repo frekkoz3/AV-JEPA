@@ -58,6 +58,52 @@ class OnlineTrajectoryBuffer:
     def refresh(self):
         self.buffer = deque(maxlen=self.capacity)
 
+
+    def sample_sequences(self, seq_len: int, batch_size: int, device : str = "cpu") -> Tuple[torch.Tensor, ...] | None:
+        """Samples sequences of transitions for training."""
+        states, actions, rewards, dones = [], [], [], []
+        attempt = 0
+
+        if len(self.buffer) < seq_len:
+            return None
+
+        while len(states) < batch_size:
+            if attempt > batch_size * 2:
+                break
+            attempt += 1
+
+            start_idx = random.randint(0, len(self.buffer) - seq_len)
+            # A sequence is valid if all but the last transition are not terminal
+            valid_seq = not any(
+                self.buffer[start_idx + i][4] == 1.0
+                for i in range(seq_len - 1)
+            )
+            if not valid_seq:
+                continue
+
+            s_seq, a_seq, r_seq, d_seq = [], [], [], []
+            for i in range(start_idx, start_idx+seq_len):
+                s, a, r, s_next, done = self.buffer[i]
+                s_seq.append(s)
+                a_seq.append(a)
+                r_seq.append(torch.tensor(r, dtype=torch.float32) if not isinstance(r, torch.Tensor) else r)
+                d_seq.append(torch.tensor(done, dtype=torch.float32) if not isinstance(done, torch.Tensor) else done)
+
+            states.append(torch.stack(s_seq))
+            actions.append(torch.stack(a_seq))
+            rewards.append(torch.stack(r_seq))
+            dones.append(torch.stack(d_seq))
+
+        if len(states) == batch_size:
+            return (
+                torch.stack(states).to(device),  # Shape: (batch_size, seq_len, ...)
+                torch.stack(actions).to(device),  # Shape: (batch_size, seq_len, ...)
+                torch.stack(rewards).to(device),  # Shape: (batch_size, seq_len, 1)
+                torch.stack(dones).to(device)     # Shape: (batch_size, seq_len, 1)
+            )
+        else:
+            return None
+
     def __len__(self):
         return len(self.buffer)
 
