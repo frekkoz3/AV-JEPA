@@ -66,6 +66,7 @@ if __name__ == '__main__':
     clean_checkpoints = config.get("clean_checkpoints", True)
     load_checkpoints = config.get("load_checkpoints", False)
     load_checkpoints_path = config.get("load_checkpoints_path", f"{where_save}final.pkl")
+    starting_epoch = config.get("starting_epoch", 0)
 
     # Sequence parameters
     horizon = config.get("horizon", 3)
@@ -192,28 +193,20 @@ if __name__ == '__main__':
 
         # Dynamically saving checkpoints and removing them
         if epoch%epochs_per_checkpoint == 0:
-            starting_epochs = 0
-            if load_checkpoints and checkpoint_name.endswith(".pkl") and epoch :
-                tag = checkpoint_name[:-4]
-                try:
-                    starting_epochs = int(tag.split("/")[-1])
-                except:
-                    continue
-
-            save_results(f"{where_save}{(starting_epochs+epoch)//epochs_per_checkpoint}.pkl",
+            save_results(f"{where_save}{(starting_epoch+epoch)//epochs_per_checkpoint}.pkl",
                          trainer.predictor,
                          trainer.encoder,
                          trainer.policy.network)
             if clean_checkpoints:
-                old = Path(f"{where_save}{(starting_epochs+epoch)//epochs_per_checkpoint - 1}.pkl")
+                old = Path(f"{where_save}{(starting_epoch+epoch)//epochs_per_checkpoint - 1}.pkl")
                 if old.exists():
                     old.unlink()
     
     if clean_checkpoints:
         import math
         # Removing the last checkpoint searching for the correct index with floor and ceil functions
-        old_ceil = Path(f"{where_save}{math.ceil(total_epochs//epochs_per_checkpoint)}.pkl")
-        old_floor = Path(f"{where_save}{math.floor(total_epochs//epochs_per_checkpoint)}.pkl")
+        old_ceil = Path(f"{where_save}{math.ceil((starting_epoch + total_epochs)/epochs_per_checkpoint)}.pkl")
+        old_floor = Path(f"{where_save}{math.floor((starting_epoch + total_epochs)/epochs_per_checkpoint)}.pkl")
         if old_ceil.exists():
             old_ceil.unlink()
         if old_floor.exists():

@@ -92,6 +92,7 @@ save:
   clean_checkpoints : True
   load_checkpoints : False
   last_checkpoint : "final.pkl"
+  starting_epoch : 0
   #save_path: "./models/e2e/"
 
 load:
