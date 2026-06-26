@@ -17,7 +17,7 @@ from collections import deque
 from typing import Dict, Any, Tuple
 
 from src.game.snake import SnakeEnv
-from src.policy.algorithms import ConvPPO, AttentionPPO
+from src.policy.algorithms import *
 from src.policy.regularizers import *
 from src.policy.policy import Policy
 
@@ -116,15 +116,18 @@ class OnlineTrajectoryBuffer:
             s_seq, a_seq, r_seq, d_seq = [], [], [], []
             for i in range(start_idx, start_idx+seq_len):
                 s, a, r, done = self.buffer[i]
+                if done == 1.0 and i != start_idx + seq_len - 1:
+                    break
                 s_seq.append(s)
                 a_seq.append(a)
                 r_seq.append(torch.tensor(r, dtype=torch.float32) if not isinstance(r, torch.Tensor) else r)
                 d_seq.append(torch.tensor(done, dtype=torch.float32) if not isinstance(done, torch.Tensor) else done)
 
-            states.append(torch.stack(s_seq))
-            actions.append(torch.stack(a_seq))
-            rewards.append(torch.stack(r_seq))
-            dones.append(torch.stack(d_seq))
+            if len(s_seq) == seq_len:
+                states.append(torch.stack(s_seq))
+                actions.append(torch.stack(a_seq))
+                rewards.append(torch.stack(r_seq))
+                dones.append(torch.stack(d_seq))
 
         return (
             torch.stack(states).to(device),  # Shape: (batch_size, seq_len, ...)
@@ -417,18 +420,32 @@ class E2EJEPA:
         # Anti-Collapse Loss
         loss_sigreg = self.sigreg(context_embedding.transpose(0, 1))
 
-        z_t_policy = context_embedding[:, -1].unsqueeze(1).detach()
-        z_tp1_target = target_embedding[:, -1].unsqueeze(1).detach()
-        a_t = a_seq[:, -1]
-        r_t = r_seq[:, -1]
-        done_t = done_seq[:, -1]
-
         if isinstance(self.policy.network, (AttentionPPO, ConvPPO)):
             raise NotImplementedError("Policy update for AttentionPPO and ConvPPO is not implemented yet.")
         else:
+            # Prepare inputs for policy update
+            if isinstance(self.policy.network, DQN):
+                z_t_policy = context_embedding[:, -1].detach()      # [B, D]
+                z_tp1_policy = target_embedding[:, 0].detach()      # [B, D]
+                a_t = a_seq[:, -1].detach()                         # [B, 4] --- 4 because of OneHot
+                r_t = r_seq[:, -1].detach()                         # [B]
+                done_t = done_seq[:, -1].detach()                   # [B]
+            elif isinstance(self.policy.network, AttentionDQN):
+                # Attention DQN expects sequences
+                # Only predicts one step in the future!
+                z_t_policy = context_embedding.detach()             # [B, SeqLen, D]
+                z_tp1_policy = torch.cat(
+                    (
+                        context_embedding[:, 1:],                   # [B, SeqLen-1, D]
+                        target_embedding[:, :1]                     # [B, 1, D]
+                    ), dim=1).detach()                              # [B, SeqLen, D]
+                a_t = context_action.detach()                       # [B, SeqLen, 4]
+                r_t = r_seq[:, -1].detach()                         # [B]
+                done_t = done_seq[:, -1].detach()                   # [B]
+
             reg_coeff = self.gamma.step(loss_target = loss_pred.detach() ) if self.gamma else 1.0
             loss_policy = self.policy.update_parameters(init_state = z_t_policy,
-                                                        next_state = z_tp1_target,
+                                                        next_state = z_tp1_policy,
                                                         actions = a_t,
                                                         rewards = r_t,
                                                         dones = done_t,

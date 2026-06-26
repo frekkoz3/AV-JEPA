@@ -518,7 +518,7 @@ class PolicyPPO(Policy):
             self.optimizer.step()
 
             loss_history.append(loss.item())
-            dist_history.append(dist.probs.mean(dim=0).cpu().etach().numpy())
+            dist_history.append(dist.probs.mean(dim=0).cpu().detach().numpy())
 
         return {"loss": np.mean(loss_history), "mean_distribution": np.mean(dist_history, axis=0)}
 
@@ -541,7 +541,7 @@ class PolicyDQN(Policy):
         self.env = None
 
         self.target_network = copy.deepcopy(self.network)
-        self.target_net_update_freq = kwargs.get("target_net_update_freq", 25)
+        self.target_net_update_freq = kwargs.get("pol_target_net_update_freq", 25)
         self.epoch = 0
 
         self.buffer_size = kwargs.get("buffer_size", 10000)
@@ -737,24 +737,28 @@ class PolicyDQN(Policy):
         # Compute Q-Values for the initial state
         q_values = self.network(init_state)
 
-        # Actions are One-Hot encoded, so we need to gather the Q-values corresponding to the taken actions
-        actions_idxs = torch.argmax(actions, dim=-1, keepdim=True).unsqueeze(1)
+        # Consider just the last action,
+        # which is the only relevant for the reward
+        if actions.dim() == 3:                                  # AttentionDQN case
+            actions = actions[:, -1]                            # [B, A]
+
+        # Gather Q-values corresponding to the taken One-Hot encoded action
+        actions_idx = actions.argmax(dim=-1, keepdim=True)      # [B, 1]
 
         # Force shape to [Batch, 1]
-        online_q_values = q_values.gather(-1, actions_idxs).view(-1, 1)
+        online_q_values = q_values.gather(1, actions_idx)       # [B, 1]
 
         # Compute Target Q-Values for the next state using the target network
         with torch.no_grad():
             next_actions = self.network(next_state).argmax(dim=-1, keepdim=True)
-            next_q_target = self.target_network(next_state)
+            next_q_values = self.target_network(next_state).gather(1, next_actions)
 
-            # Extract values and force alignment to [Batch, 1]
-            next_q_values = next_q_target.gather(-1, next_actions).view(-1, 1)
+            if rewards.dim() == 1:
+                rewards = rewards.unsqueeze(-1)                 # [B, 1]
+            if dones.dim() == 1:
+                dones = dones.unsqueeze(-1)                     # [B, 1]
 
-            r = rewards.view(-1, 1)
-            d = dones.view(-1, 1)
-
-            target_q_values = r + self.reward_discount * next_q_values * (1 - d)
+            target_q_values = rewards + self.reward_discount * next_q_values * (1. - dones)
 
         # Compute the loss (MSE) between online and target Q-Values
         loss = reg_coeff * self.loss(online_q_values, target_q_values)
