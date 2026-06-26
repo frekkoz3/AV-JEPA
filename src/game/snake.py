@@ -106,6 +106,7 @@ class SnakeEnv(gym.Env):
                     self.canvas = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT), pygame.HIDDEN)
                 except pygame.error:
                     self.canvas = pygame.display.set_mode((WIDTH, TOTAL_HEIGHT))
+
     def _load_and_scale_sprites(self):
         """Loads assets and resizes them to match the environment's CELL_SIZE."""
         def load_sp(path):
@@ -451,6 +452,12 @@ class SnakeEnv(gym.Env):
             pygame.quit()
             self.window = None
             self.canvas = None
+
+    def _generate_random_frame(self, apple_pos : tuple[int, int] | None = None, seed = None):
+        self.reset(seed)
+        if apple_pos:
+            self.food = apple_pos
+        return self._render_frame()
 
 import argparse
 
