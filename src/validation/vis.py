@@ -10,6 +10,8 @@ import cv2
 import torch
 import argparse
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
 
 from src.jepa.transformers import VisualTransformer, Predictor
 from src.jepa.e2e_jepa import *
@@ -19,6 +21,31 @@ from src.utils.utils import flat_config
 
 from torch.optim import lr_scheduler, Adam, AdamW
 from torch.optim.lr_scheduler import ExponentialLR
+
+def plot_clusters(all_frames, n_clusters, spc, labels, cluster_out):
+    fig, axes = plt.subplots(n_clusters, spc, figsize=(spc * 2, n_clusters * 2))
+
+    if n_clusters == 1:
+        return
+
+    for cluster_id in range(n_clusters):
+        cluster_indices = np.where(labels == cluster_id)[0]
+        n_avail = len(cluster_indices)
+        chosen_pos = np.linspace(0, n_avail - 1, min(spc, n_avail), dtype=int)
+        chosen = cluster_indices[chosen_pos]
+
+        axes[cluster_id, 0].set_ylabel(f"C{cluster_id}", fontsize=7, rotation=0, labelpad=20)
+        for col, idx in enumerate(chosen):
+            ax = axes[cluster_id, col]
+            ax.imshow(all_frames[idx])
+            ax.axis("off")
+        for col in range(len(chosen), spc):
+            axes[cluster_id, col].axis("off")
+
+    plt.suptitle("Sample frames per embedding cluster", fontsize=10)
+    plt.tight_layout()
+    plt.savefig(cluster_out, dpi=150)
+    plt.show()
 
 if __name__ == '__main__': 
     """
@@ -32,6 +59,9 @@ if __name__ == '__main__':
     parser.add_argument("--config", required=True, help="Path to config.yaml")
     parser.add_argument("--weights", required=True, help="Path to final.pkl")
     parser.add_argument("--episodes", type=int, default=10)
+    parser.add_argument("--n_clusters", type=int, default=10) # Default same as episodes
+    parser.add_argument("--samples_per_cluster", type=int, default=4)
+    parser.add_argument("--cluster_out", default="clusters.png", help="Path to save cluster plot")
 
     args = parser.parse_args()
 
@@ -116,6 +146,10 @@ if __name__ == '__main__':
 
     env = SnakeEnv(render_mode="human", observation_type="image", difficulty=config.get("difficulty"))
 
+    selected_actions = []
+    all_embeddings = []
+    all_frames = []
+
     for episode in range(args.episodes):
 
         x_t, _ = env.reset()
@@ -132,8 +166,13 @@ if __name__ == '__main__':
 
                 z_t = model.encoder(x_t)[:, 0, :]
 
+                all_embeddings.append(z_t.cpu().numpy())
+                all_frames.append(x_t.squeeze(0).permute(2, 1, 0).cpu().numpy().astype(np.uint8))
+
                 # Choose the action with the greedy policy
                 a_t, _ = model.get_action(z_t.detach().unsqueeze(0), greedy=True)
+
+                selected_actions.append(a_t)
                 
                 # Step the real environment
                 x_tp1, r_t, done, _, info = env.step(a_t)
@@ -147,4 +186,20 @@ if __name__ == '__main__':
                 x_t = x_tp1
 
                 env.render()
+
+    # Compute statistics on selected actions
+    action_counts = np.bincount(selected_actions, minlength=action_dim)
+
+    # Clustering embeddings
+    embeddings = np.vstack(all_embeddings)
+    n_clusters = min(args.n_clusters, len(embeddings))
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init="auto")
+    labels = kmeans.fit_predict(embeddings)
+
+
+    plot_clusters(all_frames, n_clusters, args.samples_per_cluster, labels, args.cluster_out)
+
+    print("Action distribution:")
+    for action, count in enumerate(action_counts):
+        print(f"Action {action}: {count} times ({(count / len(selected_actions)) * 100:.2f}%)")
             
