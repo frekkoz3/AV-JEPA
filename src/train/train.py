@@ -185,6 +185,12 @@ if __name__ == '__main__':
                   f"Pred: {metrics['pred_loss']:.8f} | "
                   f"Policy : {metrics['policy_loss']:.8f} | "
                   f"SigReg: {metrics['sigreg_loss']:.8f}")
+            # Add also Learning rate and epsilon parameter to the metrics dictionary
+            metrics.update({
+                "learning_rate": trainer.optimizer.param_groups[0]['lr'],
+                "epsilon": trainer.policy.epsilon_strategy.eps
+            })
+            print(metrics)
             metrics_collector.add_metric(metrics)
             if not load_checkpoints:
                 metrics_collector.save_metrics(f"{where_save}metrics.csv", append = (epoch > 0))
