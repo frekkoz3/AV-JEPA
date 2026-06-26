@@ -14,7 +14,8 @@ import torch
 import shutil
 from pathlib import Path
 
-from torch.optim import lr_scheduler
+from torch.optim import lr_scheduler, Adam, AdamW
+from torch.optim.lr_scheduler import ExponentialLR
 
 from src.jepa.transformers import VisualTransformer, Predictor
 from src.game.snake import SnakeEnv, TOTAL_HEIGHT, GRID_HEIGHT, WIDTH, CELL_SIZE, BAR_HEIGHT

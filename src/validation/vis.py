@@ -17,6 +17,9 @@ from src.game.snake import SnakeEnv, TOTAL_HEIGHT, GRID_HEIGHT, WIDTH, CELL_SIZE
 from src.policy.policy import Policy, PolicyDQN, PolicyPPO
 from src.utils.utils import flat_config
 
+from torch.optim import lr_scheduler, Adam, AdamW
+from torch.optim.lr_scheduler import ExponentialLR
+
 if __name__ == '__main__': 
     """
         Quick usage (from the root of the project)
@@ -49,6 +52,13 @@ if __name__ == '__main__':
     n_obstacles = config.get("n_obstacles", 10)
     fps = config.get("fps", 10)
 
+    # Optimizer
+    optimizer = config.get("optimizer", "Adam")
+    lr_init = config.get("lr_init", 1e-4)
+    lr_scheduler = config.get("lr_scheduler", "ExponentialLR")
+    lr_step_size = config.get("lr_step_size", 10)
+    lr_gamma = config.get("lr_gamma", 0.9)
+
     # Encoder parameters
     embed_dim = config.get("embedding_dim", 64)
     enc_mlp_dim = config.get("enc_mlp_dim", 256)
@@ -65,6 +75,7 @@ if __name__ == '__main__':
     pred_depth = config.get("pred_depth", 3)
     use_adaLN = config.get("use_adaLN", True)
     dropout = config.get("dropout", 0.0)
+    horizon = config.get("horizon", 1)
 
     model = E2EJEPA(
         env=SnakeEnv(**config),
@@ -85,10 +96,23 @@ if __name__ == '__main__':
         policy=eval(config["pol_type"])(**config),
         action_dim=action_dim,
         embed_dim=embed_dim,
-        device=device
+        optimizer_name = optimizer,
+        lr_init = lr_init,
+        lr_scheduler = lr_scheduler,
+        lr_gamma = lr_gamma,
+        device=device,
+        horizon=horizon,
     )
 
-    load_results(args.weights, model.predictor, model.encoder, model.policy.network)
+    load_results(args.weights, 
+                 model.predictor,
+                 model.encoder,
+                 model.policy.network,
+                 model.optimizer,
+                 model.scheduler)
+                 #model.policy.optimizer,
+                 #model.policy.scheduler
+                 #)
 
     env = SnakeEnv(render_mode="human", observation_type="image", difficulty=config.get("difficulty"))
 
