@@ -20,7 +20,14 @@ from src.policy.regularizers import *
 from src.policy.policy import Policy
 
 
-def save_results(where: str, predictor: nn.Module, encoder: nn.Module, policy_net: nn.Module, optimizer: torch.optim.Optimizer, scheduler : torch.optim.lr_scheduler._LRScheduler, policy_optimizer : torch.optim.Optimizer, policy_scheduler : torch.optim.lr_scheduler._LRScheduler):
+def save_results(where: str,
+                 predictor: nn.Module,
+                 encoder: nn.Module,
+                 policy_net: nn.Module,
+                 optimizer: torch.optim.Optimizer,
+                 scheduler : torch.optim.lr_scheduler._LRScheduler,
+                 policy_optimizer : torch.optim.Optimizer,
+                 policy_scheduler : torch.optim.lr_scheduler._LRScheduler):
     torch.save({
         "predictor": predictor.state_dict(), 
         "encoder": encoder.state_dict(), 
@@ -31,7 +38,14 @@ def save_results(where: str, predictor: nn.Module, encoder: nn.Module, policy_ne
         "pol_scheduler": policy_scheduler.state_dict() if policy_scheduler is not None else None
     }, where)
 
-def load_results(where: str, predictor: nn.Module, encoder: nn.Module, policy_net: nn.Module, optimizer : torch.optim.Optimizer, scheduler : torch.optim.lr_scheduler._LRScheduler, policy_optimizer : torch.optim.Optimizer, policy_scheduler : torch.optim.lr_scheduler._LRScheduler):
+def load_results(where: str,
+                 predictor: nn.Module,
+                 encoder: nn.Module,
+                 policy_net: nn.Module,
+                 optimizer : torch.optim.Optimizer,
+                 scheduler : torch.optim.lr_scheduler._LRScheduler,
+                 policy_optimizer : torch.optim.Optimizer,
+                 policy_scheduler : torch.optim.lr_scheduler._LRScheduler):
     ldr = torch.load(where, weights_only=False, map_location="cpu")
     predictor.load_state_dict(ldr["predictor"])
     encoder.load_state_dict(ldr["encoder"])
@@ -40,6 +54,7 @@ def load_results(where: str, predictor: nn.Module, encoder: nn.Module, policy_ne
     scheduler.load_state_dict(ldr["scheduler"])
     policy_optimizer.load_state_dict(ldr["pol_optimizer"])
     policy_scheduler.load_state_dict(ldr["pol_scheduler"])
+
 
 # Experience Replay Buffer for Online Trajectories
 class OnlineTrajectoryBuffer:
@@ -119,6 +134,8 @@ class OnlineTrajectoryBuffer:
     def __len__(self):
         return len(self.buffer)
 
+
+
 # SIGReg parameters
 DEFAULT_SIGREG_KNOTS = 17
 DEFAULT_SIGREG_NUM_PROJ = 128
@@ -159,6 +176,7 @@ class SIGReg(nn.Module):
         w_t = torch.exp(- (t_nodes ** 2) / 2.0)
         self.register_buffer('w_t', w_t)
 
+
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         """
         z: Latent embeddings tensor of shape (Batch, Seq, Embed_Dim) or (N, Embed_Dim)
@@ -198,6 +216,8 @@ class SIGReg(nn.Module):
         loss = torch.mean(integral)
 
         return loss
+
+
 
 # E2E-JEPA
 class E2EJEPA:
@@ -397,6 +417,7 @@ class E2EJEPA:
 
         z_t_policy = context_embedding[:, -1].unsqueeze(1).detach()
         z_tp1_target = target_embedding[:, -1].unsqueeze(1).detach()
+        a_t = a_seq[:, -1]
         r_t = r_seq[:, -1]
         done_t = done_seq[:, -1]
 
@@ -406,6 +427,7 @@ class E2EJEPA:
             reg_coeff = self.gamma.step(loss_target = loss_pred.detach() ) if self.gamma else 1.0
             loss_policy = self.policy.update_parameters(init_state = z_t_policy,
                                                         next_state = z_tp1_target,
+                                                        actions = a_t,
                                                         rewards = r_t,
                                                         dones = done_t,
                                                         reg_coeff = reg_coeff)

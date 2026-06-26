@@ -654,14 +654,14 @@ class PolicyDQN(Policy):
 
             q_values  = self.network(b_states)
 
-            current_q = q_values.gather(1, b_actions.unsqueeze(1)).squeeze(1)
+            current_q = q_values.gather(-1, b_actions.unsqueeze(-1)).squeeze(-1)
 
             with torch.no_grad():
-                # next_q  = self.target_network(b_next_states)
+                # next_q = self.target_network(b_next_states)
                 # target_q = b_rewards + self.reward_discount * next_q.max(dim=1)[0] * (1 - b_dones)
-                next_actions = self.network(b_next_states).argmax(dim=1, keepdim=True)
+                next_actions = self.network(b_next_states).argmax(dim=-1, keepdim=True)
                 next_q_target = self.target_network(b_next_states)
-                next_q_value = next_q_target.gather(1, next_actions).squeeze(1)
+                next_q_value = next_q_target.gather(-1, next_actions).squeeze(-1)
                 target_q = b_rewards + self.reward_discount * next_q_value * (1 - b_dones)
 
 
@@ -706,6 +706,7 @@ class PolicyDQN(Policy):
     def update_parameters(self,
                           init_state : torch.Tensor | Tuple[torch.Tensor, ...],
                           next_state : torch.Tensor | Tuple[torch.Tensor],
+                          actions : torch.Tensor | Tuple[torch.Tensor],
                           rewards : torch.Tensor,
                           dones : torch.Tensor,
                           reg_coeff : float = 1.,
@@ -719,6 +720,8 @@ class PolicyDQN(Policy):
             The initial state or a tuple of states from which to compute the DQN update.
         next_state : torch.Tensor | Tuple[torch.Tensor]
             The next state or a tuple of next states corresponding to the initial states.
+        actions : torch.Tensor | Tuple[torch.Tensor]
+            The actions taken in the initial states.
         rewards : torch.Tensor
             The rewards received after taking actions in the initial states.
         dones : torch.Tensor
@@ -733,14 +736,25 @@ class PolicyDQN(Policy):
         """
         # Compute Q-Values for the initial state
         q_values = self.network(init_state)
-        online_q_values = q_values.gather(1, torch.argmax(q_values, dim=-1, keepdim=True)).squeeze(-1)
+
+        # Actions are One-Hot encoded, so we need to gather the Q-values corresponding to the taken actions
+        actions_idxs = torch.argmax(actions, dim=-1, keepdim=True).unsqueeze(1)
+
+        # Force shape to [Batch, 1]
+        online_q_values = q_values.gather(-1, actions_idxs).view(-1, 1)
 
         # Compute Target Q-Values for the next state using the target network
         with torch.no_grad():
-            next_actions = self.network(next_state).argmax(dim=1, keepdim=True)
+            next_actions = self.network(next_state).argmax(dim=-1, keepdim=True)
             next_q_target = self.target_network(next_state)
-            next_q_values = next_q_target.gather(1, next_actions)
-            target_q_values = rewards.squeeze(-1) + self.reward_discount * next_q_values.squeeze(-1) * (1 - dones.squeeze(-1))
+
+            # Extract values and force alignment to [Batch, 1]
+            next_q_values = next_q_target.gather(-1, next_actions).view(-1, 1)
+
+            r = rewards.view(-1, 1)
+            d = dones.view(-1, 1)
+
+            target_q_values = r + self.reward_discount * next_q_values * (1 - d)
 
         # Compute the loss (MSE) between online and target Q-Values
         loss = reg_coeff * self.loss(online_q_values, target_q_values)
