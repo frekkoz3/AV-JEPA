@@ -17,8 +17,8 @@ environment:
 
   n_actions : 4
   reward_food: 20
-  reward_death: -5
-  reward_step: -0.5
+  reward_death: -100
+  reward_step: -0.01
 
 
 encoder:
@@ -72,7 +72,7 @@ policy:
 training:
   device : "cuda"
 
-  n_epochs : 1000
+  n_epochs : 5000
   steps_per_epoch : 256
 
   batch_size : 32
