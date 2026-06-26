@@ -16,4 +16,4 @@ source .venv/bin/activate
 mkdir -p logs
 
 # ---- run program ----
-python -m src.train.train --config ./configs/e2e/e2e.yaml --run-name dem
+python -m src.train.train --config ./models/e2e/dem/config.yaml --run-name dem
