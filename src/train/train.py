@@ -248,4 +248,5 @@ if __name__ == '__main__':
         if old_floor.exists():
             old_floor.unlink()
 
-    save_results(f"{where_save}final.pkl",  trainer.predictor, trainer.encoder, trainer.policy.network)
+    save_results(f"{where_save}final.pkl",  trainer.predictor, trainer.encoder, trainer.policy.network, trainer.optimizer,
+                 trainer.scheduler, trainer.policy.optimizer, trainer.policy.scheduler)
