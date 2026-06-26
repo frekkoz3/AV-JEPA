@@ -6,7 +6,7 @@
 #SBATCH --partition=Main
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=128G
+#SBATCH --mem=256G
 #SBATCH --gres=gpu:1
 
 # activate venv
@@ -16,4 +16,4 @@ source .venv/bin/activate
 mkdir -p logs
 
 # ---- run program ----
-python -m src.train.train --config ./models/e2e/dem/config.yaml --run-name dem
+python -m src.train.train --config ./configs/e2e/run.yaml --run-name dem
