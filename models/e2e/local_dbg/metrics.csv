@@ -1,2 +1,0 @@
-total_loss,pred_loss,policy_loss,sigreg_loss,avg_norm_zt,learning_rate,epsilon
-0.23290860652923584,0.2233552485704422,1.5616834163665771,0.47766774892807007,"tensor(4.9752e-06, device='cuda:0')",0.001,0.99975
