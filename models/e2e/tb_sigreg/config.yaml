@@ -20,11 +20,12 @@ environment:
   reward_death: -5
   reward_step: 0.01
 
-  horizon: 3
-  history_size: 4
+  horizon: 2
+  history_size: 3
+
 
 encoder:
-  embedding_dim : 192
+  embedding_dim : 96
   enc_mlp_dim : 256
   enc_n_heads : 3
   enc_depth : 12
@@ -33,7 +34,7 @@ encoder:
 
 
 predictor:
-  pred_hidden_dim : 192
+  pred_hidden_dim : 96
   pred_cond_dim : 4
   pred_mlp_dim : 256
   pred_n_heads : 16
@@ -68,7 +69,7 @@ training:
   n_epochs : 10000
   steps_per_epoch : 256
 
-  batch_size : 64
+  batch_size : 32
   buffer_size : 1024
   refresh_buffer_freq : 8
 
@@ -85,7 +86,7 @@ save:
   save_model: True
   clean_checkpoints : True
   load_checkpoints : False
-  last_checkpoint : "final.pkl"
+  last_checkpoint : "8.pkl"
   #save_path: "./models/e2e/"
 
 load:
