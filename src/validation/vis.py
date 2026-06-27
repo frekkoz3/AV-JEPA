@@ -115,10 +115,10 @@ if __name__ == '__main__':
                  model.encoder,
                  model.policy.network,
                  model.optimizer,
-                 model.scheduler)
-                 #model.policy.optimizer,
-                 #model.policy.scheduler
-                 #)
+                 model.scheduler,
+                 model.policy.optimizer,
+                 model.policy.scheduler
+                 )
 
     env = SnakeEnv(render_mode="human", observation_type="image", difficulty=config.get("difficulty"))
 

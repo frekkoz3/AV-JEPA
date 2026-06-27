@@ -19,7 +19,8 @@ CELL_SIZE = 35
 GRID_WIDTH, GRID_HEIGHT = 20, 20
 WIDTH = GRID_WIDTH * CELL_SIZE
 GAME_HEIGHT = GRID_HEIGHT * CELL_SIZE
-BAR_HEIGHT = 2*CELL_SIZE  # Height of the top status bar
+STATUS_BAR = False
+BAR_HEIGHT = 2*CELL_SIZE  if STATUS_BAR else 0# Height of the top status bar
 TOTAL_HEIGHT = GAME_HEIGHT + BAR_HEIGHT
 N_OBSTACLES = 10
 FPS = 10
@@ -52,6 +53,8 @@ class SnakeEnv(gym.Env):
         # Difficulty 1 means the standard game
         # Difficulty 2 means that there are some obstacles
         # Difficulty 3 means that the obstacle can change positions and there are fake apples
+
+        self.status_bar = STATUS_BAR
 
         if self.observation_type == "image":
             self.observation_space = spaces.Box(
@@ -369,20 +372,22 @@ class SnakeEnv(gym.Env):
         paint_surface = self.window if self.render_mode == "human" else self.canvas
         
         paint_surface.fill((40, 40, 40))
-        
-        total_seconds = self.total_step // self.metadata["render_fps"]
-        minutes = total_seconds // 60
-        seconds = total_seconds % 60
-        time_str = f"{minutes:02d}.{seconds:02d}"
 
-        diff_text = self.font.render(f"Difficulty {self.difficulty}", True, (255, 255, 255))
-        score_text = self.font.render(f"Score {self.score}", True, (255, 215, 0))
-        time_text = self.font.render(f"Time {time_str}", True, (255, 255, 255))
+        if self.status_bar:
         
-        text_y = (BAR_HEIGHT - diff_text.get_height()) // 2
-        paint_surface.blit(diff_text, (20, text_y))
-        paint_surface.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, text_y))
-        paint_surface.blit(time_text, (WIDTH - time_text.get_width() - 20, text_y))
+            total_seconds = self.total_step // self.metadata["render_fps"]
+            minutes = total_seconds // 60
+            seconds = total_seconds % 60
+            time_str = f"{minutes:02d}.{seconds:02d}"
+
+            diff_text = self.font.render(f"Difficulty {self.difficulty}", True, (255, 255, 255))
+            score_text = self.font.render(f"Score {self.score}", True, (255, 215, 0))
+            time_text = self.font.render(f"Time {time_str}", True, (255, 255, 255))
+            
+            text_y = (BAR_HEIGHT - diff_text.get_height()) // 2
+            paint_surface.blit(diff_text, (20, text_y))
+            paint_surface.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, text_y))
+            paint_surface.blit(time_text, (WIDTH - time_text.get_width() - 20, text_y))
 
         # Grass + Obstacles
         paint_surface.blit(self.grass_background, (0, BAR_HEIGHT))
