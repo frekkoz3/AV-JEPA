@@ -742,6 +742,7 @@ class PolicyDQN(Policy):
         elif actions.dim() == 2 and actions.shape[1] == 1:
             actions_idx = actions.long()
         else:
+            actions = actions[:, -1]
             actions_idx = actions.argmax(dim=-1, keepdim=True)
 
         # Force shape to [Batch, 1]
