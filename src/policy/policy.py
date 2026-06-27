@@ -737,13 +737,12 @@ class PolicyDQN(Policy):
         # Compute Q-Values for the initial state
         q_values = self.network(init_state)
 
-        # Consider just the last action,
-        # which is the only relevant for the reward
-        if actions.dim() == 3:                                  # AttentionDQN case
-            actions = actions[:, -1]                            # [B, A]
-
-        # Gather Q-values corresponding to the taken One-Hot encoded action
-        actions_idx = actions.argmax(dim=-1, keepdim=True)      # [B, 1]
+        if actions.dim() == 1:
+            actions_idx = actions.unsqueeze(-1).long() # Shape [B, 1]
+        elif actions.dim() == 2 and actions.shape[1] == 1:
+            actions_idx = actions.long()
+        else:
+            actions_idx = actions.argmax(dim=-1, keepdim=True)
 
         # Force shape to [Batch, 1]
         online_q_values = q_values.gather(1, actions_idx)       # [B, 1]

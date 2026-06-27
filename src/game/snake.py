@@ -24,13 +24,14 @@ BAR_HEIGHT = 2*CELL_SIZE  if STATUS_BAR else 0# Height of the top status bar
 TOTAL_HEIGHT = GAME_HEIGHT + BAR_HEIGHT
 N_OBSTACLES = 10
 FPS = 10
+USING_GRASS = False
 
 RESOURCES_PATH = "src/game/resources/"
 
 class SnakeEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": FPS}
 
-    def __init__(self, render_mode=None, max_step=100, observation_type="grid", difficulty=0, rescale_frames : bool = False, using_grass : bool = False, **kwargs):
+    def __init__(self, render_mode=None, max_step=100, observation_type="grid", difficulty=0, rescale_frames : bool = False, **kwargs):
         """
         Snake Environment
 
@@ -65,7 +66,7 @@ class SnakeEnv(gym.Env):
                 low=0, high=4, shape=(GRID_HEIGHT, GRID_WIDTH), dtype=np.uint8
             )
 
-        self.using_grass = using_grass
+        self.using_grass = USING_GRASS
             
         if kwargs == {}:
             self.reward_food = 20

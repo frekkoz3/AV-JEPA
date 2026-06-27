@@ -97,11 +97,11 @@ class LinearRegularizer(Regularizer):
                  reg_weight_start : float | int = 0.001,
                  reg_weight_end : float | int = 1,
                  reg_weight_step : float | int = 0.001):
-
-        assert reg_weight_step > 0, \
-            f"Linear growth step = {reg_weight_step} must be > 0."
-        assert reg_weight_start < reg_weight_end, \
-            f"Start weight = {reg_weight_start} must be < end weight = {reg_weight_end}."
+        
+        """
+        If reg_weight_step is negative : from start -> end decreasing
+        If reg weight_step is positive : from start -> end increasing
+        """
 
         self.reg_weight = reg_weight_start
         self.reg_weight_end = reg_weight_end
@@ -111,7 +111,7 @@ class LinearRegularizer(Regularizer):
     def step(self, **kwargs):
         """Updates the regularization weight according to the linear growth step and the maximum limit."""
         if self.reg_weight < self.reg_weight_end:
-            self.reg_weight = min(self.reg_weight + self.reg_weight_step, self.reg_weight_end)
+            self.reg_weight = max(self.reg_weight + self.reg_weight_step, self.reg_weight_end) if self.reg_weight_step < 0 else min(self.reg_weight + self.reg_weight_step, self.reg_weight_end)
         return self.reg_weight
 
 

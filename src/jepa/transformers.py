@@ -13,9 +13,6 @@ def modulate(x, shift, scale):
     """AdaLN-zero modulation"""
     return x * (1 + scale) + shift
 
-# ---------------------------------- #
-# CHANGE 1: Add causal Mask
-# ---------------------------------- #
 class MultiHeadAttention(nn.Module):
     """Multi-head self-attention module"""
 
@@ -58,9 +55,7 @@ class PositionalEncoding(nn.Module):
     def forward(self, x):
         return x + self.pos_embedding
 
-# ---------------------------------- #
-# CHANGE 2: Add causal parameter
-# ---------------------------------- #
+
 class TransformerEncoderBlock(nn.Module):
     """Transformer block with AdaLN-zero conditioning"""
 
@@ -88,9 +83,7 @@ class TransformerEncoderBlock(nn.Module):
 
             nn.init.constant_(self.adaLN_modulation[-1].weight, 0)
             nn.init.constant_(self.adaLN_modulation[-1].bias, 0)
-    # ---------------------------------- #
-    # CHANGE 2: Add causal parameter
-    # ---------------------------------- #
+
     def forward(self, x, c = None, causal : bool = False):
         if self.do_adaLN_modulation:
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
