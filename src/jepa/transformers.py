@@ -56,6 +56,52 @@ class PositionalEncoding(nn.Module):
         return x + self.pos_embedding
 
 
+class PositionalEncoding2D(nn.Module):
+    """2D Sinusoidal Positional Encoding (ViT-style).
+
+    Splits embed_dim in half: first half encodes x (width), second half encodes y (height).
+    PE(x, y) = [PE_x(x), PE_y(y)] where each uses standard sine/cosine:
+        PE_x,2i   = sin(x / 10000^(2i/d))
+        PE_x,2i+1 = cos(x / 10000^(2i/d))  (same for y)
+    """
+
+    def __init__(self, embed_dim: int, height: int, width: int):
+        super().__init__()
+        assert embed_dim % 2 == 0, "embed_dim must be even for 2D sinusoidal encoding"
+        d = embed_dim // 2
+
+        i = torch.arange(0, d, 2, dtype=torch.float)
+        denom = torch.pow(10000.0, i / d)  # (d/2,)
+
+        def _sinusoidal(positions: torch.Tensor) -> torch.Tensor:
+            angles = positions[:, None] / denom[None, :]  # (N, d/2)
+            enc = torch.zeros(len(positions), d)
+            enc[:, 0::2] = torch.sin(angles)
+            enc[:, 1::2] = torch.cos(angles)
+            return enc
+
+        pe_y = _sinusoidal(torch.arange(height, dtype=torch.float))  # (H, d)
+        pe_x = _sinusoidal(torch.arange(width, dtype=torch.float))   # (W, d)
+
+        # Broadcast to (H, W, d) and concatenate → (H, W, embed_dim)
+        pe = torch.cat(
+            [pe_x[None, :, :].expand(height, -1, -1),
+             pe_y[:, None, :].expand(-1, width, -1)],
+            dim=-1,
+        ).reshape(1, height * width, embed_dim)  # (1, H*W, embed_dim)
+
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Handles an optional leading CLS token (size H*W+1) with zero encoding
+        if x.size(1) == self.pe.size(1) + 1:
+            cls_pe = torch.zeros(1, 1, self.pe.size(2), device=self.pe.device, dtype=self.pe.dtype)
+            pe = torch.cat([cls_pe, self.pe], dim=1)
+        else:
+            pe = self.pe
+        return x + pe
+
+
 class TransformerEncoderBlock(nn.Module):
     """Transformer block with AdaLN-zero conditioning"""
 
@@ -152,7 +198,7 @@ class VisualTransformer(nn.Module):
     def __init__(self, img_size, embed_dim, mlp_dim, patch_size=16, num_heads=8, depth=6, no_last_layer_norm=False):
         super().__init__()
         self.patch_embed = PatchEmbedding(in_channels=3, embed_dim=embed_dim, patch_size=patch_size)
-        self.pos_embed = PositionalEncoding(embed_dim=embed_dim, seq_len=(img_size[0]//patch_size)*(img_size[1]//patch_size))
+        self.pos_embed = PositionalEncoding2D(embed_dim=embed_dim, height=img_size[0]//patch_size, width=img_size[1]//patch_size)
         self.transformer = Transformer(input_dim=embed_dim, hidden_dim=embed_dim, output_dim=embed_dim, depth=depth, num_heads=num_heads, mlp_dim=mlp_dim, no_last_layer_norm=no_last_layer_norm)
         self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
 
