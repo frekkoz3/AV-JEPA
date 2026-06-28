@@ -3,7 +3,7 @@
 # ==============================================================================
 # SLURM RESOURCE ALLOCATION (SBATCH Directives)
 # ==============================================================================
-#SBATCH --job-name=E2EDAt
+#SBATCH --job-name=E2E-YTB-SigReg
 #SBATCH --output=log/dqn_att_%j.log
 #SBATCH --partition=GPU
 #SBATCH --nodes=1
