@@ -50,7 +50,7 @@ class PositionalEncoding(nn.Module):
 
     def __init__(self, embed_dim, seq_len):
         super().__init__()
-        self.pos_embedding = nn.Parameter(torch.zeros(1, seq_len+1, embed_dim))
+        self.pos_embedding = nn.Parameter(torch.randn(1, seq_len+1, embed_dim))
 
     def forward(self, x):
         return x + self.pos_embedding
