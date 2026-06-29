@@ -122,36 +122,69 @@ if __name__ == '__main__':
     
     embeddings, attentions = model.encoder(image, return_attention=True)
 
-    attn = attentions[-1]
+    import math
 
-    attn = attn.mean(dim=1)
+    # Last layer attention
+    attn = attentions[-1][0]        # (num_heads, N, N)
 
-    cls_attn = attn[0, 0, 1:]
+    num_heads = attn.shape[0]
 
-    print(attentions[-1].shape)
-    print(attn.shape)
-    print(cls_attn.shape)
-    print(float(cls_attn.min()), float(cls_attn.max()))
+    rows = math.ceil(math.sqrt(num_heads))
+    cols = math.ceil(num_heads / rows)
 
-    heatmap = cls_attn.reshape(TOTAL_HEIGHT//enc_patch_size, WIDTH//enc_patch_size)
+    fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 4*rows))
 
-    heatmap = F.interpolate(
-        heatmap[None,None],
-        size=(TOTAL_HEIGHT,WIDTH),
-        mode="bilinear",
-        align_corners=False,
-    )[0,0]
+    if rows == 1 and cols == 1:
+        axes = np.array([[axes]])
+    elif rows == 1:
+        axes = np.array([axes])
+    elif cols == 1:
+        axes = axes[:, None]
 
-    heatmap = heatmap / heatmap.max()
+    # Original image
+    img = image.squeeze(0).cpu().permute(1, 2, 0).numpy() / 255.0
 
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+    for h in range(num_heads):
 
-    ax[0].imshow(image.squeeze(0).cpu().permute(1,2,0) / 255.)
-    ax[0].set_title("Image")
-    ax[0].axis("off")
+        # CLS -> patches
+        cls_attn = attn[h, 0, 1:]
 
-    ax[1].imshow(heatmap.cpu(), cmap="jet")
-    ax[1].set_title("CLS Attention")
-    ax[1].axis("off")
+        print(f"head {h} : min {float(cls_attn.min())}, max {float(cls_attn.max())}")
 
+        heatmap = cls_attn.reshape(
+            TOTAL_HEIGHT // enc_patch_size,
+            WIDTH // enc_patch_size,
+        )
+
+        heatmap = F.interpolate(
+            heatmap[None, None],
+            size=(TOTAL_HEIGHT, WIDTH),
+            mode="bilinear",
+            align_corners=False,
+        )[0, 0]
+
+        heatmap = heatmap / (heatmap.max() + 1e-8)
+
+        r = h // cols
+        c = h % cols
+
+        ax = axes[r, c]
+
+        ax.imshow(img)
+        ax.imshow(
+            heatmap.cpu(),
+            cmap="jet",
+            alpha=0.5,
+        )
+
+        ax.set_title(f"Head {h}")
+        ax.axis("off")
+
+    # Hide unused axes
+    for k in range(num_heads, rows * cols):
+        r = k // cols
+        c = k % cols
+        axes[r, c].axis("off")
+
+    plt.tight_layout()
     plt.show()

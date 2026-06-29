@@ -51,7 +51,7 @@ class MultiHeadAttention(nn.Module):
 
         if return_attention:
             x, attn = out
-            return x, attn
+            return x, attn.detach()
 
         return out[0]
 
