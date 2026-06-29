@@ -193,7 +193,7 @@ class Transformer(nn.Module):
 class VisualTransformer(nn.Module):
     """Visual encoder with patch embedding and transformer backbone."""
 
-    def __init__(self, img_size, embed_dim, mlp_dim, patch_size=16, num_heads=8, depth=6, no_last_layer_norm=False):
+    def __init__(self, img_size, embed_dim, mlp_dim, patch_size=16, num_heads=8, depth=6, no_last_layer_norm=True):
         super().__init__()
         self.patch_embed = PatchEmbedding(in_channels=3, embed_dim=embed_dim, patch_size=patch_size)
         self.pos_embed = PositionalEncoding2D(embed_dim=embed_dim, height=img_size[0]//patch_size, width=img_size[1]//patch_size)
