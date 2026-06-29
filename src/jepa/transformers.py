@@ -160,12 +160,10 @@ class Transformer(nn.Module):
         cond_dim : int= 1,
         dropout : float = 0.0,
         use_adaLN : bool = False,
-        no_last_layer_norm=False
+        no_last_layer_norm=True
     ):
         super().__init__()
         self.norm = nn.LayerNorm(hidden_dim) if not no_last_layer_norm else nn.Identity()
-
-        self.norm = nn.LayerNorm(hidden_dim)
 
         self.input_proj = nn.Linear(input_dim, hidden_dim) if input_dim != hidden_dim else nn.Identity()
         self.cond_proj = nn.Linear(cond_dim, hidden_dim) if cond_dim != hidden_dim else nn.Identity()
