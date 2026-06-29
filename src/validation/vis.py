@@ -115,6 +115,7 @@ if __name__ == '__main__':
     load_results(args.weights, 
                  model.predictor,
                  model.encoder,
+                 model.projector,
                  model.policy.network,
                  model.optimizer,
                  model.scheduler,

@@ -1,14 +1,6 @@
-r"""
-  _____ ____  _____          _ _____ ____   _    
- | ____|___ \| ____|        | | ____|  _ \ / \   
- |  _|   __) |  _| _____ _  | |  _| | |_) / _ \  
- | |___ / __/| |__|_____| |_| | |___|  __/ ___ \ 
- |_____|_____|_____|     \___/|_____|_| /_/   \_\
-"""
 import yaml
 import cv2
 import torch
-import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -21,21 +13,9 @@ from src.utils.utils import flat_config
 from torch.optim import lr_scheduler, Adam, AdamW
 from torch.optim.lr_scheduler import ExponentialLR
 
-if __name__ == '__main__': 
-    """
-        Quick usage (from the root of the project)
+def load_e2e(config_path : str, weights_path : str):
 
-        py -m src.validation.attention --config PATH-TO-CONFIG --weights PATH-TO-WEIGHTS
-
-        make sure that the config is referring to the config used to train the weights you're loading
-    """   
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True, help="Path to config.yaml")
-    parser.add_argument("--weights", required=True, help="Path to final.pkl")
-
-    args = parser.parse_args()
-
-    with open(args.config, "r") as f:
+    with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
     config = flat_config(config)
@@ -96,7 +76,7 @@ if __name__ == '__main__':
                             mlp_dim=pred_mlp_dim,
                             use_adaLN=use_adaLN,
                             dropout=dropout).to(device=device),
-        projector=Projector(embed_dim=embed_dim, hidden_dim=proj_hidden_dim),
+        projector=Projector(embed_dim=embed_dim, hidden_dim=proj_hidden_dim)
         policy=eval(config["pol_type"])(**config),
         action_dim=action_dim,
         embed_dim=embed_dim,
@@ -106,9 +86,9 @@ if __name__ == '__main__':
         lr_gamma = lr_gamma,
         device=device,
         horizon=horizon,
-    )
+        )
 
-    load_results(args.weights, 
+    load_results(weights_path, 
                  model.predictor,
                  model.encoder,
                  model.projector,
@@ -119,44 +99,4 @@ if __name__ == '__main__':
                  model.policy.scheduler,
                  model.policy.epsilon_strategy)
     
-    env = SnakeEnv(render_mode="rgb_array", observation_type="image", difficulty=config.get("difficulty"), rescale_frames=True)
-
-    image = env._generate_random_frame()
-
-    image = torch.tensor(np.expand_dims(image, 0)).float().to(device=device)
-    
-    embeddings, attentions = model.encoder(image, return_attention=True)
-
-    attn = attentions[-1]
-
-    attn = attn.mean(dim=1)
-
-    cls_attn = attn[0, 0, 1:]
-
-    print(attentions[-1].shape)
-    print(attn.shape)
-    print(cls_attn.shape)
-    print(float(cls_attn.min()), float(cls_attn.max()))
-
-    heatmap = cls_attn.reshape(TOTAL_HEIGHT//enc_patch_size, WIDTH//enc_patch_size)
-
-    heatmap = F.interpolate(
-        heatmap[None,None],
-        size=(TOTAL_HEIGHT,WIDTH),
-        mode="bilinear",
-        align_corners=False,
-    )[0,0]
-
-    heatmap = heatmap / heatmap.max()
-
-    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-
-    ax[0].imshow(image.squeeze(0).cpu().permute(1,2,0) / 255.)
-    ax[0].set_title("Image")
-    ax[0].axis("off")
-
-    ax[1].imshow(heatmap.cpu(), cmap="jet")
-    ax[1].set_title("CLS Attention")
-    ax[1].axis("off")
-
-    plt.show()
+    return model

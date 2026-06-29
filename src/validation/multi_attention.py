@@ -66,6 +66,9 @@ if __name__ == '__main__':
     enc_depth = config.get("enc_depth", 3)
     enc_patch_size = config.get("enc_patch_size", 6)
     enc_patch_in_channels = config.get("enc_path_in_channels", 3)
+    
+    #Projector
+    proj_hidden_dim = config.get("proj_hidden_dim")
 
     # Predictor parameters
     pred_hidden_dim = config.get("pred_hidden_dim", 64)
@@ -93,6 +96,7 @@ if __name__ == '__main__':
                             mlp_dim=pred_mlp_dim,
                             use_adaLN=use_adaLN,
                             dropout=dropout).to(device=device),
+        projector=Projector(embed_dim=embed_dim, hidden_dim=proj_hidden_dim),
         policy=eval(config["pol_type"])(**config),
         action_dim=action_dim,
         embed_dim=embed_dim,
@@ -104,16 +108,6 @@ if __name__ == '__main__':
         horizon=horizon,
     )
 
-    load_results(args.weights, 
-                 model.predictor,
-                 model.encoder,
-                 model.policy.network,
-                 model.optimizer,
-                 model.scheduler,
-                 model.policy.optimizer,
-                 model.policy.scheduler,
-                 model.policy.epsilon_strategy)
-    
     env = SnakeEnv(render_mode="rgb_array", observation_type="image", difficulty=config.get("difficulty"), rescale_frames=True)
 
     image = env._generate_random_frame()

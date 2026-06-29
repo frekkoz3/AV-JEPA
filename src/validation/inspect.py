@@ -14,12 +14,12 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.metrics import confusion_matrix
 
-from src.jepa.transformers import VisualTransformer, Predictor
+from src.validation.clustering import *
+from src.game.snake import *
+from src.policy.algorithms import *
+from src.policy.policy import *
 from src.jepa.e2e_jepa import *
-from src.game.snake import SnakeEnv, TOTAL_HEIGHT, GRID_HEIGHT, WIDTH, CELL_SIZE, BAR_HEIGHT, GRID_WIDTH
-from src.policy.policy import Policy, PolicyDQN, PolicyPPO
-from src.utils.utils import flat_config
-from src.validation.clustering import plot_clusters
+from src.jepa.transformers import *
 
 from torch.optim import lr_scheduler, Adam, AdamW
 from torch.optim.lr_scheduler import ExponentialLR
@@ -111,6 +111,7 @@ if __name__ == '__main__':
     load_results(args.weights, 
                  model.predictor,
                  model.encoder,
+                 model.projector,
                  model.policy.network,
                  model.optimizer,
                  model.scheduler,
