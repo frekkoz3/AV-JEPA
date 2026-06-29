@@ -48,7 +48,7 @@ policy:
   pol_output_dim: 4
   pol_type: PolicyDQN
   reward_discount: 0.95
-  using_heuristic: false
+  using_heuristic: true
 predictor:
   dropout: 0.1
   pred_cond_dim: 4
