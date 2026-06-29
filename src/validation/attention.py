@@ -128,6 +128,11 @@ if __name__ == '__main__':
 
     cls_attn = attn[0, 0, 1:]
 
+    print(attentions[-1].shape)
+    print(attn.shape)
+    print(cls_attn.shape)
+    print(cls_attn.min(), cls_attn.max())
+
     heatmap = cls_attn.reshape(TOTAL_HEIGHT//enc_patch_size, WIDTH//enc_patch_size)
 
     heatmap = F.interpolate(
