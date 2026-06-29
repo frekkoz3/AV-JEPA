@@ -1,10 +1,11 @@
 #!/bin/bash
 
 # ==============================================================================
-# SLURM RESOURCE ALLOCATION (SBATCH Directives)
+# SLURM SETUP
 # ==============================================================================
-#SBATCH --job-name=E2E-UPD
-#SBATCH --output=log/upd_%j.log
+
+#SBATCH --job-name=E2E-NonHeuristic
+#SBATCH --output=log/n_%j.log
 #SBATCH --partition=GPU
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -57,7 +58,7 @@ export PYTHONPATH="$(pwd):$PYTHONPATH"
 # ==============================================================================
 
 # Construct the config file path automatically
-CONFIG_FILE="./models/e2e/tb_upd/config.yaml"
+CONFIG_FILE="./models/e2e/non-heuristic/config.yaml"
 
 # Safety check
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -68,6 +69,6 @@ fi
 echo "Training model using configuration: ${CONFIG_FILE}"
 
 # Run the training script matching the argparse configuration in policy.py
-python -m src.train.train --config "${CONFIG_FILE}" --run-name tb_upd
+python -m src.train.train --config "${CONFIG_FILE}" --run-name non-heuristic
 
 echo "Job completed successfully."
