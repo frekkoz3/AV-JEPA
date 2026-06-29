@@ -11,8 +11,6 @@ import torch
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.metrics import confusion_matrix
 
 from src.jepa.transformers import VisualTransformer, Predictor
 from src.jepa.e2e_jepa import *
@@ -113,13 +111,16 @@ if __name__ == '__main__':
                  model.optimizer,
                  model.scheduler,
                  model.policy.optimizer,
-                 model.policy.scheduler)
+                 model.policy.scheduler,
+                 model.policy.epsilon_strategy)
     
     env = SnakeEnv(render_mode="rgb_array", observation_type="image", difficulty=config.get("difficulty"))
 
     image = env._generate_random_frame()
+
+    image = torch.tensor(np.expand_dims(image, 0)).float().to(device=device)
     
-    embeddings, attentions = model(image, return_attention=True)
+    embeddings, attentions = model.encoder(image, return_attention=True)
 
     attn = attentions[-1]
 
@@ -127,21 +128,25 @@ if __name__ == '__main__':
 
     cls_attn = attn[0, 0, 1:]
 
-    heatmap = cls_attn.reshape(TOTAL_HEIGHT//enc_patch_size, GRID_WIDTH//enc_patch_size)
+    heatmap = cls_attn.reshape(TOTAL_HEIGHT//enc_patch_size, WIDTH//enc_patch_size)
 
     heatmap = F.interpolate(
         heatmap[None,None],
-        size=(TOTAL_HEIGHT,GRID_WIDTH),
+        size=(TOTAL_HEIGHT,WIDTH),
         mode="bilinear",
         align_corners=False,
     )[0,0]
 
     heatmap = heatmap / heatmap.max()
 
-    plt.imshow(image.permute(1,2,0))
-    plt.imshow(
-        heatmap.cpu(),
-        alpha=0.5,
-        cmap="jet",
-    )
-    plt.axis("off")
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+
+    ax[0].imshow(image.squeeze(0).cpu().permute(1,2,0) / 255.)
+    ax[0].set_title("Image")
+    ax[0].axis("off")
+
+    ax[1].imshow(heatmap.detach().cpu(), cmap="jet")
+    ax[1].set_title("CLS Attention")
+    ax[1].axis("off")
+
+    plt.show()

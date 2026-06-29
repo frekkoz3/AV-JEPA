@@ -166,6 +166,10 @@ class TransformerEncoderBlock(nn.Module):
                     causal=causal,
                     return_attention=True,
                 )
+            
+            else:
+                attn_out = self.attn(modulate(self.norm1(x), shift_msa, scale_msa),
+                    causal=causal)
 
             x = x + gate_msa * attn_out
             x = x + gate_mlp * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
