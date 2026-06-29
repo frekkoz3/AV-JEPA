@@ -30,6 +30,7 @@ GPU = "cuda"
 CPU = "cpu"
 XPU = "xpu"
 
+
 if __name__ == '__main__':
     """
         Quick usage (from the root of the project)
@@ -93,7 +94,6 @@ if __name__ == '__main__':
     fps = config.get("fps", 10)
     difficulty = config.get("difficulty", 2)
     rescale_frames = config.get("rescale_frames", False)
-    using_heuristic = config.get("using_heuristic", False)
 
     # Encoder parameters
     embed_dim = config.get("embedding_dim", 64)
@@ -167,8 +167,8 @@ if __name__ == '__main__':
             for step in range(steps_per_epoch):
                 z_t = trainer.encoder(x_t)[:, 0, :]
                 
-                # Choose action actively using current model state
-                a_t, _ = trainer.get_action(z_t.detach().unsqueeze(1)) if using_heuristic else env._heuristic_action()
+                # Choose action actively using internal heuristic
+                a_t, _ = env._heuristic_action()
                 
                 # Step the real environment
                 x_tp1, r_t, done, _, info = env.step(a_t)
