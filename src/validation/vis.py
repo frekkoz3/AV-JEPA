@@ -123,7 +123,7 @@ if __name__ == '__main__':
                  model.policy.epsilon_strategy
                  )
 
-    env = SnakeEnv(render_mode="human", observation_type="image", difficulty=config.get("difficulty"), rescale_frames=rescale_frames)
+    env = SnakeEnv(render_mode="human", observation_type="image", difficulty=config.get("difficulty"), rescale_frames=True)
 
     selected_actions = []
     all_embeddings = []

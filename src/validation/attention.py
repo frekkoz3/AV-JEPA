@@ -114,7 +114,7 @@ if __name__ == '__main__':
                  model.policy.scheduler,
                  model.policy.epsilon_strategy)
     
-    env = SnakeEnv(render_mode="rgb_array", observation_type="image", difficulty=config.get("difficulty"))
+    env = SnakeEnv(render_mode="rgb_array", observation_type="image", difficulty=config.get("difficulty"), rescale_frames=True)
 
     image = env._generate_random_frame()
 

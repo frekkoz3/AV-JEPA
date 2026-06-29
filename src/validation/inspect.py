@@ -139,7 +139,7 @@ if __name__ == '__main__':
         print(f"Action {action}: {count} times ({(count / args.n_samples) * 100:.2f}%)")
 
     # Experiment 2: Cluster embeddings from random states and visualize the clusters
-    env = SnakeEnv(render_mode="rgb_array", observation_type="image", difficulty=config.get("difficulty"))
+    env = SnakeEnv(render_mode="rgb_array", observation_type="image", difficulty=config.get("difficulty"), rescale_frames=True)
     
     all_embeddings = []
     all_frames = []
