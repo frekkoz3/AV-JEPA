@@ -519,7 +519,7 @@ class SnakeEnv(gym.Env):
 
         if candidates:
             candidates.sort()
-            return candidates[0][1]
+            return candidates[0][1], None
 
         # No safe move: just return any legal action
         return random.choice(self.get_possible_actions(current_action)), None
