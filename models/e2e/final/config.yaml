@@ -51,6 +51,8 @@ policy:
   pol_loss : "MSELoss"
   reward_discount : 0.95
 
+  using_heuristic: False
+
   epsilon_strategy: "EpsilonGreedy"
   epsilon_start: 1.
   epsilon_end: 0.05
