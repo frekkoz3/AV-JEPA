@@ -169,7 +169,7 @@ if __name__ == '__main__':
                 z_t = trainer.encoder(x_t)[:, 0, :]
                 
                 # Choose action actively using current model state
-                a_t, _ = trainer.get_action(z_t.detach().unsqueeze(1)) if using_heuristic else env._heuristic_action()
+                a_t, _ = trainer.get_action(z_t.detach().unsqueeze(1)) if not using_heuristic else env._heuristic_action()
                 
                 # Step the real environment
                 x_tp1, r_t, done, _, info = env.step(a_t)
