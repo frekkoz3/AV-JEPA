@@ -228,7 +228,8 @@ if __name__ == '__main__':
                          trainer.optimizer,
                          trainer.scheduler,
                          trainer.policy.optimizer,
-                         trainer.policy.scheduler)
+                         trainer.policy.scheduler,
+                         trainer.policy.epsilon_strategy.eps)
 
 
             if clean_checkpoints:
