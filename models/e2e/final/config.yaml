@@ -18,7 +18,8 @@ environment:
   n_actions : 4
   reward_food: 50
   reward_death: -5
-  reward_step: 0.1
+  reward_step: 0.
+  reward_illegal_action : -1
 
   horizon: 2
   history_size: 3
