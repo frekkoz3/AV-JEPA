@@ -51,7 +51,7 @@ def load_results(where: str,
                  scheduler : torch.optim.lr_scheduler._LRScheduler,
                  policy_optimizer : torch.optim.Optimizer,
                  policy_scheduler : torch.optim.lr_scheduler._LRScheduler,
-                 policy_eps : Policy.epsilon_strategy,
+                 policy_eps,
                 ):
     ldr = torch.load(where, weights_only=False, map_location="cpu")
     predictor.load_state_dict(ldr["predictor"])
