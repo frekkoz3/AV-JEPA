@@ -72,10 +72,12 @@ class SnakeEnv(gym.Env):
             self.reward_food = 20
             self.reward_death = -5
             self.reward_step = -0.5
+            self.reward_wrong_action = -1
         else:
             self.reward_food = kwargs["reward_food"]
             self.reward_death = kwargs["reward_death"]
             self.reward_step = kwargs["reward_step"]
+            self.reward_wrong_action = kwargs["reward_wrong_action"]
 
         self.max_step = max_step
 
@@ -324,6 +326,7 @@ class SnakeEnv(gym.Env):
             self.direction = new_dir
         else:
             self.info = {"act" : directions.index(self.direction)}
+            reward = self.reward_wrong_action
 
         head_x, head_y = self.snake[0]
         dx, dy = self.direction
