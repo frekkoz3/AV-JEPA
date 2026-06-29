@@ -90,21 +90,27 @@ class PositionalEncoding2D(nn.Module):
 
     def __init__(self, embed_dim: int, height: int, width: int):
         super().__init__()
-        assert embed_dim % 2 == 0, "embed_dim must be even for 2D sinusoidal encoding"
+        assert embed_dim % 4 == 0, "embed_dim must be divisible by 4 for 2D sinusoidal encoding"
         d = embed_dim // 2
 
         i = torch.arange(0, d, 2, dtype=torch.float)
         denom = torch.pow(10000.0, i / d)  # (d/2,)
 
-        def _sinusoidal(positions: torch.Tensor) -> torch.Tensor:
-            angles = positions[:, None] / denom[None, :]  # (N, d/2)
-            enc = torch.zeros(len(positions), d)
+        def _sinusoidal(positions: torch.Tensor, dim: int) -> torch.Tensor:
+            i = torch.arange(0, dim, 2, dtype=torch.float)
+            denom = torch.pow(10000.0, i / dim)
+
+            angles = positions[:, None] / denom[None, :]
+
+            enc = torch.zeros(len(positions), dim)
             enc[:, 0::2] = torch.sin(angles)
             enc[:, 1::2] = torch.cos(angles)
             return enc
 
-        pe_y = _sinusoidal(torch.arange(height, dtype=torch.float))  # (H, d)
-        pe_x = _sinusoidal(torch.arange(width, dtype=torch.float))   # (W, d)
+        half = embed_dim // 2
+
+        pe_y = _sinusoidal(torch.arange(height, dtype=torch.float), half)
+        pe_x = _sinusoidal(torch.arange(width, dtype=torch.float), half)
 
         # Broadcast to (H, W, d) and concatenate → (H, W, embed_dim)
         pe = torch.cat(
@@ -274,8 +280,9 @@ class VisualTransformer(nn.Module):
     def forward(self, obs: torch.Tensor, return_attention=False) -> torch.Tensor:
         x = self.patch_embed(obs)
         cls_tokens = self.cls_token.expand(obs.size(0), -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
         x = self.pos_embed(x)
+        x = torch.cat((cls_tokens, x), dim=1)
+    
         if return_attention:
             x, attentions = self.transformer(
                 x,
