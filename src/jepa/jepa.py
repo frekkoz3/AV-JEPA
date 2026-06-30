@@ -1,4 +1,10 @@
-# This was our first try implementing the rsults from LeWM
+r"""
+  _____ ____  _____          _ _____ ____   _    
+ | ____|___ \| ____|        | | ____|  _ \ / \   
+ |  _|   __) |  _| _____ _  | |  _| | |_) / _ \  
+ | |___ / __/| |__|_____| |_| | |___|  __/ ___ \ 
+ |_____|_____|_____|     \___/|_____|_| /_/   \_\
+"""
 
 import torch
 import torch.nn.functional as F

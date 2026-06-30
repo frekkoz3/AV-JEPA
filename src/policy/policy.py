@@ -1,16 +1,9 @@
-"""
-E2E-Jepa
-
-Team Rocket:
-@capsia37
-@enricosavorgnan
-@frekkoz3
-
-The file implements a class Policy that takes care of
-- evaluating q-values given a state,
-- selecting the best action,
-- applying epsilon-greedy scheduling
-- more
+r"""
+  _____ ____  _____          _ _____ ____   _    
+ | ____|___ \| ____|        | | ____|  _ \ / \   
+ |  _|   __) |  _| _____ _  | |  _| | |_) / _ \  
+ | |___ / __/| |__|_____| |_| | |___|  __/ ___ \ 
+ |_____|_____|_____|     \___/|_____|_| /_/   \_\
 """
 from typing import Dict, Any, Tuple
 import yaml

@@ -1,15 +1,9 @@
-"""
-E2E-Jepa
-
-Team Rocket:
-@capsia37
-@enricosavorgnan
-@frekkoz3
-
-The file implements a bunch of algorithms for Policy Learning, including:
-  - Deep Q-Networks (DQN),
-  - Convolutional DQN,
-  - Attention DQN
+r"""
+  _____ ____  _____          _ _____ ____   _    
+ | ____|___ \| ____|        | | ____|  _ \ / \   
+ |  _|   __) |  _| _____ _  | |  _| | |_) / _ \  
+ | |___ / __/| |__|_____| |_| | |___|  __/ ___ \ 
+ |_____|_____|_____|     \___/|_____|_| /_/   \_\
 """
 
 import torch
